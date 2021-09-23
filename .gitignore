@@ -1,3 +1,2 @@
-binary/
-build/
-build-debug/
+/build/
+/build-debug/
