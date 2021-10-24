@@ -464,6 +464,24 @@ namespace ssq {
         inline void push(HSQUIRRELVM vm, const T& value) { 
             pushByPtr<typename std::remove_pointer<typename std::remove_cv<T>::type>::type>(vm, value);
         }
+
+
+        template<std::size_t I = 0, typename... Tp>
+        inline typename std::enable_if<I == sizeof...(Tp), void>::type
+        tuple_append(HSQUIRRELVM vm, const std::tuple<Tp...>& t)
+        { }
+
+        template<std::size_t I = 0, typename... Tp>
+        inline typename std::enable_if<I < sizeof...(Tp), void>::type
+        tuple_append(HSQUIRRELVM vm, const std::tuple<Tp...>& t)
+        {
+            detail::push(vm, std::get<I>(t));
+            if(SQ_FAILED(sq_arrayappend(vm, -2))) {
+                sq_pop(vm, 2);
+                throw TypeException("Failed to push value to back of the array");
+            }
+            tuple_append<I + 1, Tp...>(vm, t);
+        }
     }
 #endif
 }

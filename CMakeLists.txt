@@ -2,14 +2,11 @@ cmake_minimum_required(VERSION 3.16)
 
 project(EVEngineDeps)
 
-
-
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/../third-party-binary)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INSTALL_MESSAGE LAZY)
 set(BUILD_SHARED_LIBS OFF)
 set(LIBTYPE STATIC)
-
 
 # for openal
 set(ALSOFT_EXAMPLES OFF)
@@ -23,7 +20,10 @@ add_subdirectory(SDL2)
 add_subdirectory(googletest)
 add_subdirectory(squirrel)
 
-# for simplesquirrel 
+# filesystem watcher already has in poco DirectoryWatcher
+# add_subdirectory(efsw)
+
+# for simplesquirrel
 set(SQUIRREL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/squirrel/include)
 set(SQUIRREL_LIBRARIES squirrel_static)
 set(SQSTDLIB_LIBRARIESRARIES sqstdlib_static)
@@ -80,3 +80,5 @@ add_library(lz4 ${lz4_src})
 # for xxhash
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/xxHash COMPONENT Development)
 add_library(xxHash ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.c)
+
+install(TARGETS physfs Box2D xxHash lz4 DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)

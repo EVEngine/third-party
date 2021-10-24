@@ -705,3 +705,39 @@ TEST_CASE("Test passing instance") {
     ssq::Script script = vm.compileSource(source.c_str());
     vm.run(script);
 }
+
+
+TEST_CASE("Test return vector") {
+    ssq::VM vm(1024);
+
+    vm.addFunc("baz", [&]() -> std::vector<int> {
+        return {10, 2, 100, 1, 5};
+    });
+
+    static const std::string source = STRINGIFY(
+		local data = baz();
+        print(data);
+        for (local i = 0; i < 5; ++i)
+            print(data[i]);
+    );
+
+    ssq::Script script = vm.compileSource(source.c_str());
+    vm.run(script);
+}
+
+TEST_CASE("Test return tuple") {
+    ssq::VM vm(1024);
+
+    vm.addFunc("baz", [&]() -> std::tuple<int, float> {
+        return std::make_tuple(1, 5.2f);
+    });
+
+    static const std::string source = STRINGIFY(
+		local data = baz();
+        print(data[0]);
+        print(data[1]);
+    );
+
+    ssq::Script script = vm.compileSource(source.c_str());
+    vm.run(script);
+}

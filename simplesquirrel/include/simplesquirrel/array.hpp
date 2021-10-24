@@ -22,6 +22,7 @@ namespace ssq {
         * @brief Destructor
         */
         virtual ~Array() = default;
+
         /**
         * @brief Constructs array out of std::vector
         */
@@ -41,6 +42,19 @@ namespace ssq {
 
             sq_pop(vm, 1); // Pop array
         }
+
+        /**
+        * @brief Constructs array out of std::tuple
+        */
+        template<typename... T>
+        Array(HSQUIRRELVM vm, const std::tuple<T...>& t):Object(vm) {
+            sq_newarray(vm, 0);
+            sq_getstackobj(vm, -1, &obj);
+            sq_addref(vm, &obj);
+            detail::tuple_append(vm, t);
+            sq_pop(vm, 1); // Pop array
+        }
+
         /**
         * @brief Converts Object to Array
         * @throws TypeException if the Object is not type of an array

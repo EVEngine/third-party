@@ -244,7 +244,7 @@ namespace ssq {
 
         static void pushArgs();
 
-        template <class First, class... Rest>
+        template <class First, class... Rest> 
         void pushArgs(First&& first, Rest&&... rest) const {
             detail::push(vm, first);
             pushArgs(std::forward<Rest>(rest)...);

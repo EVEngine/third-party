@@ -8,6 +8,8 @@ add_subdirectory(sound-libs/libvorbis)
 add_subdirectory(sound-libs/mpg123/ports/cmake)
 add_subdirectory(sound-libs/libmodplug)
 
+set(ASSIMP_BUILD_TESTS OFF)
+add_subdirectory(3dmodel-libs/assimp)
 
 include_directories(include image-libs/ sound-libs/ ${CMAKE_CURRENT_BINARY_DIR}/sound-libs/mpg123/ports/cmake/src/ sound-libs/mpg123/src/)
 

@@ -24,7 +24,7 @@ inline SQHash HashObj(const SQObject &key)
 
 struct SQTable : public SQDelegable
 {
-private:
+public:
     struct _HashNode
     {
         _HashNode() { next = NULL; }
@@ -42,7 +42,7 @@ private:
     void Rehash(bool force);
     SQTable(SQSharedState *ss, SQInteger nInitialSize);
     void _ClearNodes();
-public:
+
     static SQTable* Create(SQSharedState *ss,SQInteger nInitialSize)
     {
         SQTable *newtable = (SQTable*)SQ_MALLOC(sizeof(SQTable));

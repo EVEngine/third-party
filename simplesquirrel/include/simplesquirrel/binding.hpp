@@ -5,6 +5,7 @@
 #include "allocators.hpp"
 #include <functional>
 #include <cstring>
+#include <tuple> 
 
 namespace ssq {
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
@@ -184,6 +185,43 @@ namespace ssq {
                 }
             }
         };
+
+        template<int offet, typename... Rets, typename... Args>
+        struct func<offet, std::tuple<Rets...> , Args...> {
+            static SQInteger global(HSQUIRRELVM vm) {
+                try {
+                    std::cerr << "global" << std::endl;
+
+                    FuncPtr<std::tuple<Rets...>(Args...)>* funcPtr;
+                    sq_getuserdata(vm, -1, reinterpret_cast<void**>(&funcPtr), nullptr);
+
+                    Array arr(vm, std::forward<std::tuple<Rets...>>(
+                        callGlobal(vm, funcPtr, index_range<offet, sizeof...(Args) + offet>())));
+                    detail::push(vm, arr);
+                    return 1;
+                } catch (std::exception& e) {
+                    return sq_throwerror(vm, e.what());
+                }
+            }
+        };
+
+        template<int offet, typename Ret, typename... Args>
+        struct func<offet, std::vector<Ret>, Args...> {
+            static SQInteger global(HSQUIRRELVM vm) {
+                try {
+                    FuncPtr<std::vector<Ret>(Args...)>* funcPtr;
+                    sq_getuserdata(vm, -1, reinterpret_cast<void**>(&funcPtr), nullptr);
+
+                    Array arr(vm, std::forward<std::vector<Ret>>(
+                        callGlobal(vm, funcPtr, index_range<offet, sizeof...(Args) + offet>())));
+                    detail::push(vm, arr);
+                    return 1;
+                } catch (std::exception& e) {
+                    return sq_throwerror(vm, e.what());
+                }
+            }
+        };
+
 
         template<typename R, typename... Args>
         static void addFunc(HSQUIRRELVM vm, const char* name, const std::function<R(Args...)>& func) {

@@ -71,6 +71,27 @@ if(NOT SQ_DISABLE_INSTALLER AND NOT SQ_DISABLE_HEADER_INSTALLER)
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     COMPONENT Development
     )
+
+  install(FILES
+    squirrel/sqarray.h
+    squirrel/sqclass.h
+    squirrel/sqclosure.h
+    squirrel/sqcompiler.h
+    squirrel/sqfuncproto.h
+    squirrel/sqfuncstate.h
+    squirrel/sqlexer.h
+    squirrel/sqobject.h
+    squirrel/sqopcodes.h
+    squirrel/sqpcheader.h
+    squirrel/sqstate.h
+    squirrel/sqstring.h
+    squirrel/sqtable.h
+    squirrel/squserdata.h
+    squirrel/squtils.h
+    squirrel/sqvm.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT Development
+    )
 endif()
 
 include(CMakePackageConfigHelpers)

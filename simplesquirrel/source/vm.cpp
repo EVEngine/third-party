@@ -57,7 +57,7 @@ namespace ssq {
             sq_setforeignptr(other.vm, this);
         }
     }
-
+        
     VM::VM(VM&& other) NOEXCEPT :Table() {
         swap(other);
     }
@@ -161,7 +161,7 @@ namespace ssq {
                 throw RuntimeException("Unknown squirrel runtime error");
             throw *runtimeException;
         }
-
+            
         Object ret(vm);
         sq_getstackobj(vm, -1, &ret.getRaw());
         sq_addref(vm, &ret.getRaw());

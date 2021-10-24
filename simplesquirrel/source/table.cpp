@@ -8,7 +8,7 @@
 
 namespace ssq {
     Table::Table():Object() {
-
+            
     }
 
     Table::Table(const Object& object):Object(object) {
@@ -23,11 +23,11 @@ namespace ssq {
     }
 
     Table::Table(const Table& other):Object(other) {
-
+            
     }
 
     Table::Table(Table&& other) NOEXCEPT :Object(std::forward<Table>(other)) {
-
+            
     }
 
     Function Table::findFunc(const char* name) const {
