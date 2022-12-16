@@ -51,7 +51,7 @@ if(UNIX)
 	include(CheckSymbolExists)
 	include(CheckTypeSize)
 
-	# check_function_exists(sinf HAVE_SINF)
+	check_function_exists(sinf HAVE_SINF)
 	check_function_exists(setenv HAVE_SETENV)
 
 	check_include_files(dlfcn.h HAVE_DLFCN_H)
@@ -74,12 +74,15 @@ endif()
 
 if(MODPLUG_BUILD_STATIC)
 	add_library(modplug-static STATIC ${MODPLUG_SRC})
+	set_target_properties(modplug-static PROPERTIES OUTPUT_NAME modplug)
 	target_include_directories(modplug-static PUBLIC src src/libmodplug ${CMAKE_CURRENT_BINARY_DIR})
-	install(TARGETS modplug-static DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+	install(TARGETS modplug-static DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/ COMPONENT Development)
 endif()
 
 if(MODPLUG_BUILD_SHARED)
 	add_library(modplug SHARED ${MODPLUG_SRC})
 	target_include_directories(modplug PUBLIC src src/libmodplug ${CMAKE_CURRENT_BINARY_DIR})
-	install(TARGETS modplug DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+	install(TARGETS modplug DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/ COMPONENT Development)
 endif()
+
+

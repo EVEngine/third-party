@@ -9,7 +9,7 @@ set(BUILD_SHARED_LIBS OFF)
 set(LIBTYPE STATIC)
 
 # for openal
-set(ALSOFT_EXAMPLES OFF)
+set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)
 
 # for freetype
@@ -36,10 +36,6 @@ add_subdirectory(poco)
 
 # for zlib
 add_subdirectory(zlib)
-
-# for medialoader
-add_subdirectory(medialoader)
-
 
 # install glm
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/glm/glm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)

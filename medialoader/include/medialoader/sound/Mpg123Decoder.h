@@ -1,7 +1,7 @@
 #pragma once
 #include "medialoader/sound/Decoder.h"
 
-#include <libmpg123/mpg123.h>
+#include <mpg123.h>
 
 
 namespace medialoader {
