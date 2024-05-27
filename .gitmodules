@@ -1,0 +1,9 @@
+[submodule "zeroerr"]
+	path = zeroerr
+	url = https://github.com/sunxfancy/zeroerr
+[submodule "VKBuilder"]
+	path = VKBuilder
+	url = https://github.com/sunxfancy/VKBuilder
+[submodule "medialoader"]
+	path = medialoader
+	url = https://github.com/EVEngine/medialoader

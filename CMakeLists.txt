@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.21)
 
 project(EVEngineDeps)
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INSTALL_MESSAGE LAZY)
-set(BUILD_SHARED_LIBS OFF)
-set(LIBTYPE STATIC)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
+set(CMAKE_INSTALL_MESSAGE LAZY CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(LIBTYPE STATIC CACHE BOOL "" FORCE)
 
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 # for openal
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)
@@ -23,14 +25,14 @@ add_subdirectory(squirrel)
 # add_subdirectory(efsw)
 
 # for simplesquirrel
-set(SQUIRREL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/squirrel/include)
-set(SQUIRREL_LIBRARIES squirrel_static)
-set(SQSTDLIB_LIBRARIESRARIES sqstdlib_static)
+set(SQUIRREL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/squirrel/include CACHE STRING "" FORCE)
+set(SQUIRREL_LIBRARIES squirrel_static CACHE STRING "" FORCE)
+set(SQSTDLIB_LIBRARIESRARIES sqstdlib_static CACHE STRING "" FORCE)
 add_subdirectory(simplesquirrel)
 
 # for poco
-set(POCO_STATIC ON)
-set(BUILD_SHARED_LIBS OFF)
+set(POCO_STATIC ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(poco)
 
 # for zlib
