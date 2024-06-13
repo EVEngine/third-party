@@ -90,3 +90,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.h DESTINATION ${CMAKE_IN
 add_library(xxHash ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.c)
 
 install(TARGETS physfs Box2D xxHash lz4 DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
+# for medialoader
+add_subdirectory(medialoader)
