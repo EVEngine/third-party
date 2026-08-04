@@ -1,6 +1,6 @@
 # CMake build file list for OpenAL
 
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5)
 
 # The workaround for try_compile failing with code signing
 # since cmake-3.18.2, not required
