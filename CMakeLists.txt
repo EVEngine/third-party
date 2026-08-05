@@ -77,7 +77,9 @@ add_subdirectory(freetype)
 
 # for SDL2, googletest and squirrel
 add_subdirectory(SDL2)
-add_subdirectory(googletest)
+if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS OR ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android")))
+    add_subdirectory(googletest)
+endif()
 add_subdirectory(squirrel)
 
 # filesystem watcher already has in poco DirectoryWatcher
