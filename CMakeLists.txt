@@ -61,6 +61,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     set(BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
     set(BUILD_LIBOUT123 OFF CACHE BOOL "" FORCE)
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    # Deps are libraries only; do not create iOS app bundles for CLI tools.
+    set(CMAKE_MACOSX_BUNDLE OFF)
+    set(DISABLE_DYNAMIC ON CACHE BOOL "" FORCE)
+    add_compile_definitions(IOS=1)
     add_compile_options(
         $<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-Wno-deprecated-non-prototype>
         $<$<COMPILE_LANGUAGE:C,OBJC>:-Wno-error=declaration-after-statement>
