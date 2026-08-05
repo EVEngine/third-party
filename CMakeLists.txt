@@ -54,6 +54,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(VIDEO_COCOA OFF CACHE BOOL "" FORCE)
+    set(VIDEO_OPENGL OFF CACHE BOOL "" FORCE)
+    set(VIDEO_OPENGLES ON CACHE BOOL "" FORCE)
+    set(VIDEO_VULKAN ON CACHE BOOL "" FORCE)
+    set(VIDEO_METAL ON CACHE BOOL "" FORCE)
+    set(RENDER_METAL ON CACHE BOOL "" FORCE)
     set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
     set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(ALSOFT_INSTALL_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -64,12 +69,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     # Deps are libraries only; do not create iOS app bundles for CLI tools.
     set(CMAKE_MACOSX_BUNDLE OFF)
     set(DISABLE_DYNAMIC ON CACHE BOOL "" FORCE)
-    add_compile_definitions(IOS=1)
+    # Do NOT add_compile_definitions(IOS=1): Poco uses a typedef named IOS.
     add_compile_options(
         $<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-Wno-deprecated-non-prototype>
         $<$<COMPILE_LANGUAGE:C,OBJC>:-Wno-error=declaration-after-statement>
         $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-declaration-after-statement>
     )
+    message(STATUS "iOS deps: UIKit SDL (VIDEO_COCOA=OFF VIDEO_OPENGL=OFF)")
 endif()
 
 # for openal
