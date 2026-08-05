@@ -47,6 +47,27 @@ if(ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android"))
     )
 endif()
 
+# iOS / iPadOS: static SDL UIKit + CoreAudio OpenAL Soft; no host Cocoa path.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
+    set(IOS TRUE CACHE BOOL "" FORCE)
+    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(VIDEO_COCOA OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_INSTALL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(BUILD_LIBOUT123 OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-Wno-deprecated-non-prototype>
+        $<$<COMPILE_LANGUAGE:C,OBJC>:-Wno-error=declaration-after-statement>
+        $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-declaration-after-statement>
+    )
+endif()
+
 # for openal
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)

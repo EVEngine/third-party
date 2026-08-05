@@ -129,8 +129,14 @@ elseif(APPLE)
     set(MACOSX TRUE)
   elseif(CMAKE_SYSTEM_NAME MATCHES ".*tvOS.*")
     set(TVOS TRUE)
+  elseif(CMAKE_SYSTEM_NAME MATCHES "iOS")
+    # CMake sets CMAKE_SYSTEM_NAME to "iOS" when cross-compiling for iPhoneOS.
+    set(IOS TRUE)
   endif()
-  # TODO: iOS?
+  # Also honor an explicit -DIOS=TRUE from the parent project.
+  if(IOS)
+    set(IOS TRUE)
+  endif()
 elseif(CMAKE_SYSTEM_NAME MATCHES "BeOS.*")
   message_error("BeOS support has been removed as of SDL 2.0.2.")
 elseif(CMAKE_SYSTEM_NAME MATCHES "Haiku.*")
