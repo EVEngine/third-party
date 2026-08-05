@@ -24,6 +24,29 @@ if(APPLE)
     )
 endif()
 
+# Android NDK: shared SDL2 for SDLActivity; OpenSL ES backend for OpenAL Soft.
+if(ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android"))
+    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(ALSOFT_BACKEND_OPENSL ON CACHE BOOL "" FORCE)
+    set(ALSOFT_BACKEND_WAVE OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_REQUIRE_OPENSL ON CACHE BOOL "" FORCE)
+    set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_INSTALL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # Keep other deps static.
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    # mpg123: skip CLI tools under NDK; FPU is forced in mpg123 CMakeLists for Android.
+    set(BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(BUILD_LIBOUT123 OFF CACHE BOOL "" FORCE)
+    # SDL OpenSL / NDK headers mix declarations after statements; SDL enables -Werror=DAS.
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-error=declaration-after-statement>
+        $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-declaration-after-statement>
+    )
+endif()
+
 # for openal
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)

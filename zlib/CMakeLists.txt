@@ -206,7 +206,9 @@ endif()
 if(UNIX)
     # On unix-like platforms the library is almost always called libz
    set_target_properties(zlib zlibstatic PROPERTIES OUTPUT_NAME z)
-   if(NOT APPLE)
+   # Android NDK lld enables --no-undefined-version; zlib.map references
+   # symbols (e.g. gz_intmax) removed from this tree, so skip the script.
+   if(NOT APPLE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Android"))
      set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
    endif()
 elseif(BUILD_SHARED_LIBS AND WIN32)
