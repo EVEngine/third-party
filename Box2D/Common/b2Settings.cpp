@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdexcept>
+#include <string>
 
 b2Version b2_version = {2, 3, 2};
 

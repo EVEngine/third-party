@@ -4,6 +4,7 @@
 
 #include <functional>
 #include "function.hpp"
+#include "array.hpp"
 #include "binding.hpp"
 
 namespace ssq {

@@ -13,6 +13,17 @@ set(LIBTYPE STATIC CACHE BOOL "" FORCE)
 
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+# AppleClang / modern macOS SDK: keep vendored deps building without treating
+# newer diagnostics as hard errors (especially assimp memcpy warnings).
+if(APPLE)
+    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-Wno-deprecated-non-prototype>
+        $<$<COMPILE_LANGUAGE:C,OBJC>:-Wno-error=declaration-after-statement>
+    )
+endif()
+
 # for openal
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)
@@ -37,6 +48,24 @@ add_subdirectory(simplesquirrel)
 # for poco
 set(POCO_STATIC ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# EVEngine only links Foundation/Net/JSON/XML; disable the rest so AppleClang
+# does not need to build broken optional components (Data/BLOB, etc.).
+set(ENABLE_DATA OFF CACHE BOOL "" FORCE)
+set(ENABLE_DATA_SQLITE OFF CACHE BOOL "" FORCE)
+set(ENABLE_DATA_MYSQL OFF CACHE BOOL "" FORCE)
+set(ENABLE_DATA_POSTGRESQL OFF CACHE BOOL "" FORCE)
+set(ENABLE_DATA_ODBC OFF CACHE BOOL "" FORCE)
+set(ENABLE_MONGODB OFF CACHE BOOL "" FORCE)
+set(ENABLE_REDIS OFF CACHE BOOL "" FORCE)
+set(ENABLE_JWT OFF CACHE BOOL "" FORCE)
+set(ENABLE_NETSSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_CRYPTO OFF CACHE BOOL "" FORCE)
+set(ENABLE_ZIP OFF CACHE BOOL "" FORCE)
+set(ENABLE_PAGECOMPILER OFF CACHE BOOL "" FORCE)
+set(ENABLE_PAGECOMPILER_FILE2PAGE OFF CACHE BOOL "" FORCE)
+set(ENABLE_ACTIVERECORD OFF CACHE BOOL "" FORCE)
+set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "" FORCE)
+set(ENABLE_UTIL OFF CACHE BOOL "" FORCE)
 add_subdirectory(poco)
 
 # for zlib
