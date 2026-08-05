@@ -183,12 +183,27 @@ if(MINGW)
     set(ZLIB_DLL_SRCS ${CMAKE_CURRENT_BINARY_DIR}/zlib1rc.obj)
 endif(MINGW)
 
-add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
+# iOS apps embed only signed frameworks, so a loose libz dylib cannot ship;
+# build the static library only and let -lz resolve to it.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
+    set(ZLIB_BUILD_SHARED OFF)
+else()
+    set(ZLIB_BUILD_SHARED ON)
+endif()
+
+if(ZLIB_BUILD_SHARED)
+    add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
+    set(ZLIB_INSTALL_TARGETS zlib zlibstatic)
+else()
+    set(ZLIB_INSTALL_TARGETS zlibstatic)
+endif()
 add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
-set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
-set_target_properties(zlib PROPERTIES SOVERSION 1)
-target_include_directories(zlib PUBLIC .)
-target_include_directories(zlib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+if(ZLIB_BUILD_SHARED)
+    set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
+    set_target_properties(zlib PROPERTIES SOVERSION 1)
+    target_include_directories(zlib PUBLIC .)
+    target_include_directories(zlib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+endif()
 target_include_directories(zlibstatic PUBLIC .)
 target_include_directories(zlibstatic PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -200,24 +215,26 @@ if(NOT CYGWIN)
     #
     # This has no effect with MSVC, on that platform the version info for
     # the DLL comes from the resource file win32/zlib1.rc
-    set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+    if(ZLIB_BUILD_SHARED)
+        set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+    endif()
 endif()
 
 if(UNIX)
     # On unix-like platforms the library is almost always called libz
-   set_target_properties(zlib zlibstatic PROPERTIES OUTPUT_NAME z)
+   set_target_properties(${ZLIB_INSTALL_TARGETS} PROPERTIES OUTPUT_NAME z)
    # Android NDK lld enables --no-undefined-version; zlib.map references
    # symbols (e.g. gz_intmax) removed from this tree, so skip the script.
-   if(NOT APPLE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Android"))
+   if(ZLIB_BUILD_SHARED AND NOT APPLE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Android"))
      set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
    endif()
-elseif(BUILD_SHARED_LIBS AND WIN32)
+elseif(ZLIB_BUILD_SHARED AND BUILD_SHARED_LIBS AND WIN32)
     # Creates zlib1.dll when building shared library version
     set_target_properties(zlib PROPERTIES SUFFIX "1.dll")
 endif()
 
 if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL )
-    install(TARGETS zlib zlibstatic
+    install(TARGETS ${ZLIB_INSTALL_TARGETS}
         RUNTIME DESTINATION "${INSTALL_BIN_DIR}"
         ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
         LIBRARY DESTINATION "${INSTALL_LIB_DIR}" )
