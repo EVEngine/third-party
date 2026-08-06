@@ -2,3 +2,8 @@
 /build-debug/
 /build-mloader/
 /build-mloader-debug/
+
+# FreePats GUS patches (~32MB); regenerate with timidity-freepats/setup.sh
+/timidity-freepats/instruments/
+/timidity-freepats/deb-extract/
+/timidity-freepats/*.deb
