@@ -14,10 +14,13 @@ set(LIBTYPE STATIC CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
+# Vendored assimp pulls stb_image.h; GCC/Clang -Wsign-compare (and similar) become
+# hard failures when ASSIMP_WARNINGS_AS_ERRORS is left ON (default).
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+
 # AppleClang / modern macOS SDK: keep vendored deps building without treating
 # newer diagnostics as hard errors (especially assimp memcpy warnings).
 if(APPLE)
-    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
     add_compile_options(
         $<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-Wno-deprecated-non-prototype>
         $<$<COMPILE_LANGUAGE:C,OBJC>:-Wno-error=declaration-after-statement>
@@ -26,7 +29,6 @@ endif()
 
 # Android NDK: shared SDL2 for SDLActivity; OpenSL ES backend for OpenAL Soft.
 if(ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android"))
-    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
     set(SDL_SHARED ON CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(ALSOFT_BACKEND_OPENSL ON CACHE BOOL "" FORCE)
@@ -50,7 +52,6 @@ endif()
 # iOS / iPadOS: static SDL UIKit + CoreAudio OpenAL Soft; no host Cocoa path.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     set(IOS TRUE CACHE BOOL "" FORCE)
-    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(VIDEO_COCOA OFF CACHE BOOL "" FORCE)
