@@ -178,7 +178,41 @@ add_library(lz4 ${lz4_src})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/xxHash COMPONENT Development)
 add_library(xxHash ${CMAKE_CURRENT_SOURCE_DIR}/xxHash/xxhash.c)
 
-install(TARGETS physfs Box2D xxHash lz4 DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+# for Dear ImGui (declarative UI backend; headers + SDL/Vulkan impl)
+set(_eve_imgui_src
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_draw.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_tables.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_widgets.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_sdl.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.cpp
+)
+add_library(imgui STATIC ${_eve_imgui_src})
+target_include_directories(imgui PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/imgui>
+  $<INSTALL_INTERFACE:include>
+)
+# SDL / Vulkan resolved by consumers; keep compile-only here.
+target_include_directories(imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/SDL2/include)
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND AND Vulkan_INCLUDE_DIRS)
+  target_include_directories(imgui PRIVATE ${Vulkan_INCLUDE_DIRS})
+else()
+  target_include_directories(imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vulkan)
+endif()
+install(FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imconfig.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_internal.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imstb_rectpack.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imstb_textedit.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imstb_truetype.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_sdl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Development
+)
+
+install(TARGETS physfs Box2D xxHash lz4 imgui DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
 # for medialoader
