@@ -83,7 +83,13 @@ endif()
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
 add_subdirectory(openal-soft)
 
-# for freetype
+# for freetype — keep the static lib free of optional host deps (png/bzip2/harfbuzz).
+# Otherwise find_package() may enable them when present on the build machine, and
+# every engine link would need those system libraries.
+set(CMAKE_DISABLE_FIND_PACKAGE_HarfBuzz TRUE CACHE BOOL "" FORCE)
+set(CMAKE_DISABLE_FIND_PACKAGE_PNG TRUE CACHE BOOL "" FORCE)
+set(CMAKE_DISABLE_FIND_PACKAGE_BZip2 TRUE CACHE BOOL "" FORCE)
+set(CMAKE_DISABLE_FIND_PACKAGE_BrotliDec TRUE CACHE BOOL "" FORCE)
 add_subdirectory(freetype)
 
 # for SDL2, googletest and squirrel
@@ -154,9 +160,12 @@ install(FILES ${headers_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/utf8/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
 # for Box2D
-file(GLOB_RECURSE box2d_header ${CMAKE_CURRENT_SOURCE_DIR}/Box2D/**/*.h ${CMAKE_CURRENT_SOURCE_DIR}/Box2D/*.h )
+# Preserve Collision/Common/Dynamics layout so <Box2D/Common/b2Settings.h> resolves.
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Box2D/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Box2D
+        COMPONENT Development
+        FILES_MATCHING PATTERN "*.h")
 file(GLOB_RECURSE box2d_src ${CMAKE_CURRENT_SOURCE_DIR}/Box2D/**/*.cpp)
-install(FILES ${box2d_header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Box2D COMPONENT Development)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 add_library(Box2D ${box2d_src})
 
