@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Download FreePats and arrange for libmodplug MMPAT_PATH_TO_CFG.
+# Optional: re-download FreePats and refresh instruments/ + timidity.cfg.
+# Patches are normally tracked in-repo; run this only to regenerate.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"

@@ -9,14 +9,17 @@ share/eve/timidity/instruments/**/*.pat
 
 iOS / Android builds skip this bank (no install, no runtime lookup).
 
-## Setup (once per clone)
+## Contents
+
+`instruments/` (FreePats GUS patches, ~32MB) is **tracked in this repo**. After
+cloning `third-party`, reconfigure or rebuild so CMake stages the bank into
+`build/<plat>[-debug]/share/eve/timidity` (and SDK install can pick it up).
+
+Optional: re-download / regenerate from the Debian package with:
 
 ```bash
-./third-party/timidity-freepats/setup.sh
+./timidity-freepats/setup.sh
 ```
-
-Then reconfigure or rebuild so CMake can stage `instruments/` into the build tree
-(`build/<plat>[-debug]/share/eve/timidity`) and SDK install can pick it up.
 
 ## Runtime
 
@@ -37,6 +40,5 @@ FreePats is ~32MB. Keep only the `.pat` files your songs need and edit
 ## Notes
 
 - FreePats does not cover every GM program; ModPlug substitutes nearest patches.
-- `instruments/` is gitignored; `timidity.cfg` / `setup.sh` / this README are kept.
 - Vendored libmodplug has path-buffer and `WaveHeader.reserved` overflow fixes
   needed to load real `.pat` files safely.
