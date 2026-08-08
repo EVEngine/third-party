@@ -225,5 +225,20 @@ install(FILES
 install(TARGETS physfs Box2D xxHash lz4 imgui DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
+# Assimp (via medialoader) sets ASSIMP_BUILD_ZLIB=OFF to avoid a duplicate zlib target,
+# then runs its own FindZLIB which only searches system paths. Windows CI has no system
+# zlib, so pre-bind the vendored zlibstatic target before configuring medialoader.
+if(TARGET zlibstatic)
+    set(ZLIB_FOUND TRUE)
+    set(ZLIB_LIBRARY zlibstatic)
+    set(ZLIB_LIBRARIES zlibstatic)
+    set(ZLIB_INCLUDE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+    list(PREPEND CMAKE_INCLUDE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+    message(STATUS "third-party: exposing zlibstatic to Assimp/FindZLIB")
+endif()
 # for medialoader
 add_subdirectory(medialoader)
