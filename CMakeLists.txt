@@ -137,8 +137,8 @@ add_subdirectory(zlib)
 # install glm
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/glm/glm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
-# install VkBuilder
-file(GLOB_RECURSE vkbuilder_src ${CMAKE_CURRENT_SOURCE_DIR}/VkBuilder/include/*)
+# install VKBuilder
+file(GLOB_RECURSE vkbuilder_src ${CMAKE_CURRENT_SOURCE_DIR}/VKBuilder/include/*)
 install(FILES ${vkbuilder_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
 # install Vulkan Memory Allocator and Vulkan Headers
@@ -148,9 +148,6 @@ file(GLOB_RECURSE vulkan_video_src ${CMAKE_CURRENT_SOURCE_DIR}/vk_video/*)
 
 install(FILES ${vma_src} ${vulkan_headers_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vulkan/ COMPONENT Development)
 install(FILES ${vulkan_video_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vk_video/ COMPONENT Development)
-
-# install zeroerr
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/zeroerr/zeroerr.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
 # install header-only
 file(GLOB_RECURSE headers_src ${CMAKE_CURRENT_SOURCE_DIR}/header-only/*)
@@ -225,5 +222,20 @@ install(FILES
 install(TARGETS physfs Box2D xxHash lz4 imgui DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
+# Assimp (via medialoader) sets ASSIMP_BUILD_ZLIB=OFF to avoid a duplicate zlib target,
+# then runs its own FindZLIB which only searches system paths. Windows CI has no system
+# zlib, so pre-bind the vendored zlibstatic target before configuring medialoader.
+if(TARGET zlibstatic)
+    set(ZLIB_FOUND TRUE)
+    set(ZLIB_LIBRARY zlibstatic)
+    set(ZLIB_LIBRARIES zlibstatic)
+    set(ZLIB_INCLUDE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+    list(PREPEND CMAKE_INCLUDE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+    message(STATUS "third-party: exposing zlibstatic to Assimp/FindZLIB")
+endif()
 # for medialoader
 add_subdirectory(medialoader)
