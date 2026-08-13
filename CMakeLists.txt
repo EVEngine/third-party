@@ -19,11 +19,52 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 
 # Chinese Windows (code page 936): UTF-8 sources (e.g. FreeType) otherwise trigger C4819.
-# Do not pass /utf-8: it is shorthand for /source-charset:utf-8 /execution-charset:utf-8,
-# and Assimp already adds /source-charset:utf-8 (MSVC D8016 if both are present).
-if(MSVC)
-    add_compile_options(/source-charset:utf-8 /execution-charset:utf-8)
-endif()
+# Do not add charset flags globally: /utf-8 is shorthand for
+# /source-charset:utf-8 /execution-charset:utf-8, and MSVC D8016 if both forms
+# appear. Assimp already passes /source-charset:utf-8; googletest already
+# passes -utf-8. Per-target /utf-8 is applied after all subdirectories.
+function(eve_target_has_msvc_charset tgt dir out)
+    set(_found FALSE)
+    foreach(_prop COMPILE_OPTIONS INTERFACE_COMPILE_OPTIONS COMPILE_FLAGS)
+        get_target_property(_val ${tgt} ${_prop})
+        if(_val AND ("${_val}" MATCHES "utf-8" OR "${_val}" MATCHES "source-charset"
+                     OR "${_val}" MATCHES "execution-charset"))
+            set(_found TRUE)
+        endif()
+    endforeach()
+    get_directory_property(_dir_opts DIRECTORY "${dir}" COMPILE_OPTIONS)
+    if(_dir_opts AND ("${_dir_opts}" MATCHES "utf-8" OR "${_dir_opts}" MATCHES "source-charset"
+                      OR "${_dir_opts}" MATCHES "execution-charset"))
+        set(_found TRUE)
+    endif()
+    set(${out} ${_found} PARENT_SCOPE)
+endfunction()
+
+function(eve_msvc_utf8_if_needed dir)
+    get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(tgt IN LISTS _targets)
+        if(NOT TARGET "${tgt}")
+            continue()
+        endif()
+        get_target_property(_imported ${tgt} IMPORTED)
+        if(_imported)
+            continue()
+        endif()
+        get_target_property(_type ${tgt} TYPE)
+        if(_type STREQUAL "INTERFACE_LIBRARY" OR _type STREQUAL "UTILITY" OR _type STREQUAL "ALIAS")
+            continue()
+        endif()
+        eve_target_has_msvc_charset(${tgt} "${dir}" _has)
+        if(_has)
+            continue()
+        endif()
+        target_compile_options(${tgt} PRIVATE /utf-8)
+    endforeach()
+    get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(sub IN LISTS _subdirs)
+        eve_msvc_utf8_if_needed("${sub}")
+    endforeach()
+endfunction()
 
 # AppleClang / modern macOS SDK: keep vendored deps building without treating
 # newer diagnostics as hard errors (especially assimp memcpy warnings).
@@ -246,3 +287,7 @@ if(TARGET zlibstatic)
 endif()
 # for medialoader
 add_subdirectory(medialoader)
+
+if(MSVC)
+    eve_msvc_utf8_if_needed("${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
