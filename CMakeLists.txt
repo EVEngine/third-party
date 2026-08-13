@@ -19,8 +19,10 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 
 # Chinese Windows (code page 936): UTF-8 sources (e.g. FreeType) otherwise trigger C4819.
+# Do not pass /utf-8: it is shorthand for /source-charset:utf-8 /execution-charset:utf-8,
+# and Assimp already adds /source-charset:utf-8 (MSVC D8016 if both are present).
 if(MSVC)
-    add_compile_options(/utf-8)
+    add_compile_options(/source-charset:utf-8 /execution-charset:utf-8)
 endif()
 
 # AppleClang / modern macOS SDK: keep vendored deps building without treating
