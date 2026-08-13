@@ -18,6 +18,11 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 # hard failures when ASSIMP_WARNINGS_AS_ERRORS is left ON (default).
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 
+# Chinese Windows (code page 936): UTF-8 sources (e.g. FreeType) otherwise trigger C4819.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # AppleClang / modern macOS SDK: keep vendored deps building without treating
 # newer diagnostics as hard errors (especially assimp memcpy warnings).
 if(APPLE)
