@@ -182,12 +182,16 @@ add_subdirectory(poco)
 # for zlib
 add_subdirectory(zlib)
 
+# for Box3D (Erin Catto) — 3D rigid bodies.
+set(BOX3D_SAMPLES OFF CACHE BOOL "" FORCE)
+set(BOX3D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BOX3D_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BOX3D_DOCS OFF CACHE BOOL "" FORCE)
+set(BOX3D_VALIDATE OFF CACHE BOOL "" FORCE)
+add_subdirectory(box3d)
+
 # install glm
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/glm/glm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
-
-# install VKBuilder
-file(GLOB_RECURSE vkbuilder_src ${CMAKE_CURRENT_SOURCE_DIR}/VKBuilder/include/*)
-install(FILES ${vkbuilder_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
 # install Vulkan Memory Allocator and Vulkan Headers
 file(GLOB_RECURSE vma_src ${CMAKE_CURRENT_SOURCE_DIR}/vma/*)
@@ -200,6 +204,10 @@ install(FILES ${vulkan_video_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vk_vid
 # install header-only
 file(GLOB_RECURSE headers_src ${CMAKE_CURRENT_SOURCE_DIR}/header-only/*)
 install(FILES ${headers_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
+
+# install Dungeon Template Library (header-only)
+file(GLOB_RECURSE dtl_src ${CMAKE_CURRENT_SOURCE_DIR}/DungeonTemplateLibrary/include/*)
+install(FILES ${dtl_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 
 # install utf8
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/utf8/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
