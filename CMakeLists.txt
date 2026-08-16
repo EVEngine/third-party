@@ -141,6 +141,13 @@ set(CMAKE_DISABLE_FIND_PACKAGE_BrotliDec TRUE CACHE BOOL "" FORCE)
 add_subdirectory(freetype)
 
 # for SDL2, googletest and squirrel
+# SDL2 vendors .m/.mm sources on Apple which need OBJC/OBJCXX enabled in the
+# parent project before its targets are created (a later nested project() would
+# otherwise reset them, leaving CMAKE_OBJC_COMPILE_OBJECT unset at generate).
+if(APPLE)
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+endif()
 add_subdirectory(SDL2)
 if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS OR ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android")))
     add_subdirectory(googletest)
