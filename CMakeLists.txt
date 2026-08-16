@@ -189,6 +189,13 @@ set(BOX3D_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BOX3D_DOCS OFF CACHE BOOL "" FORCE)
 set(BOX3D_VALIDATE OFF CACHE BOOL "" FORCE)
 add_subdirectory(box3d)
+# box3d's nested project(LANGUAGES C CXX) resets the languages enabled by an
+# earlier subdirectory's project() (e.g. SDL2 enables OBJC for its .m files on
+# Apple). Re-enable OBJC/OBJCXX so those sources still compile at generate time.
+if(APPLE)
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+endif()
 
 # install glm
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/glm/glm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
