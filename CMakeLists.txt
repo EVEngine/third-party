@@ -127,9 +127,28 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     message(STATUS "iOS deps: UIKit SDL (VIDEO_COCOA=OFF VIDEO_OPENGL=OFF)")
 endif()
 
+# WebGPU browser (Emscripten): trim the dependency set hard. SDL2 and zlib come
+# from Emscripten ports (-sUSE_SDL=2 / -sUSE_ZLIB); Poco / OpenAL / medialoader
+# (assimp + mpg123/vorbis/ogg) / freetype are not buildable on WASM and the
+# corresponding engine modules (network/database/sound/audio/animation/model3d/
+# font/...) are compiled out. Keep only the simple, WASM-friendly libraries.
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set(EVENGINE_WEBGPU_TRIM TRUE CACHE BOOL "" FORCE)
+    message(STATUS "Emscripten deps: trimming third-party (Poco/OpenAL/medialoader/freetype skipped; SDL2+zlib via Emscripten ports)")
+    # The engine links with PROXY_TO_PTHREAD (shared memory), which requires
+    # every TU — including third-party archives — to be built with atomics and
+    # bulk-memory or wasm-ld rejects the object at link time.
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C,CXX>:-matomics>
+        $<$<COMPILE_LANGUAGE:C,CXX>:-mbulk-memory>
+    )
+endif()
+
 # for openal
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Build OpenAL Soft examples" FORCE)
-add_subdirectory(openal-soft)
+if(NOT EVENGINE_WEBGPU_TRIM)
+  add_subdirectory(openal-soft)
+endif()
 
 # for freetype — keep the static lib free of optional host deps (png/bzip2/harfbuzz).
 # Otherwise find_package() may enable them when present on the build machine, and
@@ -138,7 +157,9 @@ set(CMAKE_DISABLE_FIND_PACKAGE_HarfBuzz TRUE CACHE BOOL "" FORCE)
 set(CMAKE_DISABLE_FIND_PACKAGE_PNG TRUE CACHE BOOL "" FORCE)
 set(CMAKE_DISABLE_FIND_PACKAGE_BZip2 TRUE CACHE BOOL "" FORCE)
 set(CMAKE_DISABLE_FIND_PACKAGE_BrotliDec TRUE CACHE BOOL "" FORCE)
-add_subdirectory(freetype)
+if(NOT EVENGINE_WEBGPU_TRIM)
+  add_subdirectory(freetype)
+endif()
 
 # for SDL2, googletest and squirrel
 # SDL2 vendors .m/.mm sources on Apple which need OBJC/OBJCXX enabled in the
@@ -148,11 +169,30 @@ if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
 endif()
-add_subdirectory(SDL2)
-if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS OR ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android")))
+# On Emscripten SDL2 is provided by the Emscripten port (-sUSE_SDL=2); skip the
+# vendored tree entirely (it drags in host-platform backends that do not build).
+if(NOT EVENGINE_WEBGPU_TRIM)
+  add_subdirectory(SDL2)
+endif()
+if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS OR ANDROID OR (CMAKE_SYSTEM_NAME STREQUAL "Android") OR EVENGINE_WEBGPU_TRIM))
     add_subdirectory(googletest)
 endif()
+# Emscripten: WASM shared libraries are poorly supported (the dynamic sq
+# interpreter fails to link its .so deps). Build squirrel static-only and skip
+# the sq / sq_static CLI tools from the ALL graph — the engine links the static
+# archives, not the interpreter.
+if(EVENGINE_WEBGPU_TRIM)
+    set(DISABLE_DYNAMIC ON CACHE BOOL "Squirrel static-only on Emscripten" FORCE)
+endif()
 add_subdirectory(squirrel)
+if(EVENGINE_WEBGPU_TRIM)
+    # sq_static links fine with the WASM C++ runtime; the dynamic sq target is
+    # gone (DISABLE_DYNAMIC). Keep sq_static buildable so its install rule
+    # succeeds — the engine never links the interpreter binary itself.
+    if(TARGET sq_static)
+        set_property(TARGET sq_static APPEND PROPERTY LINK_LIBRARIES "c++;c++abi")
+    endif()
+endif()
 
 # filesystem watcher already has in poco DirectoryWatcher
 # add_subdirectory(efsw)
@@ -184,10 +224,15 @@ set(ENABLE_PAGECOMPILER_FILE2PAGE OFF CACHE BOOL "" FORCE)
 set(ENABLE_ACTIVERECORD OFF CACHE BOOL "" FORCE)
 set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "" FORCE)
 set(ENABLE_UTIL OFF CACHE BOOL "" FORCE)
-add_subdirectory(poco)
+if(NOT EVENGINE_WEBGPU_TRIM)
+  add_subdirectory(poco)
+endif()
 
 # for zlib
-add_subdirectory(zlib)
+# On Emscripten zlib comes from the port (-sUSE_ZLIB); skip the vendored tree.
+if(NOT EVENGINE_WEBGPU_TRIM)
+  add_subdirectory(zlib)
+endif()
 
 # for Box3D (Erin Catto) — 3D rigid bodies.
 set(BOX3D_SAMPLES OFF CACHE BOOL "" FORCE)
@@ -255,8 +300,13 @@ set(_eve_imgui_src
   ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_tables.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_widgets.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_sdl.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.cpp
 )
+if(EVENGINE_WEBGPU_TRIM)
+  # WebGPU renderer lives in the engine (ui/imgui/imgui_impl_wgpu.cpp); do not
+  # pull the Vulkan impl into the third-party static lib.
+else()
+  list(APPEND _eve_imgui_src ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.cpp)
+endif()
 add_library(imgui STATIC ${_eve_imgui_src})
 target_include_directories(imgui PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/imgui>
@@ -264,11 +314,16 @@ target_include_directories(imgui PUBLIC
 )
 # SDL / Vulkan resolved by consumers; keep compile-only here.
 target_include_directories(imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/SDL2/include)
-find_package(Vulkan QUIET)
-if(Vulkan_FOUND AND Vulkan_INCLUDE_DIRS)
-  target_include_directories(imgui PRIVATE ${Vulkan_INCLUDE_DIRS})
+if(EVENGINE_WEBGPU_TRIM)
+  # Emscripten: SDL2 headers come from the port sysroot, not vendored.
+  target_include_directories(imgui PRIVATE ${EMSCRIPTEN_SYSROOT}/include)
 else()
-  target_include_directories(imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vulkan)
+  find_package(Vulkan QUIET)
+  if(Vulkan_FOUND AND Vulkan_INCLUDE_DIRS)
+    target_include_directories(imgui PRIVATE ${Vulkan_INCLUDE_DIRS})
+  else()
+    target_include_directories(imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vulkan)
+  endif()
 endif()
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui.h
@@ -284,24 +339,65 @@ install(FILES
 
 install(TARGETS physfs Box2D xxHash lz4 imgui DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
-# Assimp (via medialoader) sets ASSIMP_BUILD_ZLIB=OFF to avoid a duplicate zlib target,
-# then runs its own FindZLIB which only searches system paths. Windows CI has no system
-# zlib, so pre-bind the vendored zlibstatic target before configuring medialoader.
-if(TARGET zlibstatic)
-    set(ZLIB_FOUND TRUE)
-    set(ZLIB_LIBRARY zlibstatic)
-    set(ZLIB_LIBRARIES zlibstatic)
-    set(ZLIB_INCLUDE_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
-        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
-    list(PREPEND CMAKE_INCLUDE_PATH
-        "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
-        "${CMAKE_CURRENT_BINARY_DIR}/zlib")
-    message(STATUS "third-party: exposing zlibstatic to Assimp/FindZLIB")
+if(NOT EVENGINE_WEBGPU_TRIM)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
+  # Assimp (via medialoader) sets ASSIMP_BUILD_ZLIB=OFF to avoid a duplicate zlib target,
+  # then runs its own FindZLIB which only searches system paths. Windows CI has no system
+  # zlib, so pre-bind the vendored zlibstatic target before configuring medialoader.
+  if(TARGET zlibstatic)
+      set(ZLIB_FOUND TRUE)
+      set(ZLIB_LIBRARY zlibstatic)
+      set(ZLIB_LIBRARIES zlibstatic)
+      set(ZLIB_INCLUDE_DIR
+          "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+          "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+      list(PREPEND CMAKE_INCLUDE_PATH
+          "${CMAKE_CURRENT_SOURCE_DIR}/zlib"
+          "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+      message(STATUS "third-party: exposing zlibstatic to Assimp/FindZLIB")
+  endif()
+  # for medialoader
+  add_subdirectory(medialoader)
+else()
+  # Emscripten: full medialoader is skipped (assimp / sound libs won't build on
+  # WASM), but the engine's EVImage module needs the image decoders. Build a
+  # minimal medialoader_image from the vendored sources + image-libs
+  # (stb / lodepng / ddsparse / tinyexr); no external jpeg/png/tiff/webp.
+  file(GLOB_RECURSE _eve_ml_img_src
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/image/*.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/image-libs/*.cpp")
+  add_library(medialoader_image STATIC ${_eve_ml_img_src})
+  target_include_directories(medialoader_image PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/include"
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/image-libs")
+  install(TARGETS medialoader_image DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+  # The engine headers still include the header-only assimp interface
+  # (<assimp/matrix4x4.h>) and the medialoader public headers; install them so
+  # the includes resolve without linking assimp.
+  file(GLOB_RECURSE _eve_assimp_hdr
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.h")
+  # config.h.in is a near-complete config.h; configure it (no double precision).
+  set(ASSIMP_DOUBLE_PRECISION OFF)
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/assimp/config.h.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/assimp_config.h"
+      @ONLY)
+  install(FILES ${_eve_assimp_hdr}
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/assimp
+      COMPONENT Development)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/assimp_config.h"
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/assimp
+      RENAME config.h
+      COMPONENT Development)
+  file(GLOB_RECURSE _eve_medialoader_hdr
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/include/*.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/include/*.hpp")
+  # install(DIRECTORY) preserves the image/ sound/ ... subdirectory layout.
+  install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/include/"
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+      COMPONENT Development
+      FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
 endif()
-# for medialoader
-add_subdirectory(medialoader)
 
 if(MSVC)
     eve_msvc_utf8_if_needed("${CMAKE_CURRENT_SOURCE_DIR}")
