@@ -378,7 +378,8 @@ else()
   # (<assimp/matrix4x4.h>) and the medialoader public headers; install them so
   # the includes resolve without linking assimp.
   file(GLOB_RECURSE _eve_assimp_hdr
-      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.h")
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.inl")
   # config.h.in is a near-complete config.h; configure it (no double precision).
   set(ASSIMP_DOUBLE_PRECISION OFF)
   configure_file(
