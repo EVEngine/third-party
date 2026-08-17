@@ -370,6 +370,9 @@ else()
   target_include_directories(medialoader_image PUBLIC
       "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/include"
       "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/image-libs")
+  # tinyexr (EXRHandler.cpp) includes <zlib.h>; the vendored zlib tree is
+  # skipped on Emscripten, so pull it in from the -sUSE_ZLIB port.
+  target_compile_options(medialoader_image PRIVATE -sUSE_ZLIB)
   install(TARGETS medialoader_image DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
   # The engine headers still include the header-only assimp interface
   # (<assimp/matrix4x4.h>) and the medialoader public headers; install them so
