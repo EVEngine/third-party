@@ -376,19 +376,19 @@ else()
   install(TARGETS medialoader_image DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
   # The engine headers still include the header-only assimp interface
   # (<assimp/matrix4x4.h>) and the medialoader public headers; install them so
-  # the includes resolve without linking assimp.
-  file(GLOB_RECURSE _eve_assimp_hdr
-      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.h"
-      "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/*.inl")
+  # the includes resolve without linking assimp. Install the whole tree so the
+  # 'Compiler/' (pushpack1.h, poppack1.h) and 'port/' subdirs keep their
+  # relative layout (texture.h does #include "./Compiler/pushpack1.h").
+  install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/assimp"
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+      COMPONENT Development
+      FILES_MATCHING PATTERN "*.h" PATTERN "*.inl")
   # config.h.in is a near-complete config.h; configure it (no double precision).
   set(ASSIMP_DOUBLE_PRECISION OFF)
   configure_file(
       "${CMAKE_CURRENT_SOURCE_DIR}/medialoader/model-libs/assimp/include/assimp/config.h.in"
       "${CMAKE_CURRENT_BINARY_DIR}/assimp_config.h"
       @ONLY)
-  install(FILES ${_eve_assimp_hdr}
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/assimp
-      COMPONENT Development)
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/assimp_config.h"
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/assimp
       RENAME config.h
