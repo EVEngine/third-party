@@ -337,7 +337,17 @@ install(FILES
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Development
 )
 
-install(TARGETS physfs Box2D xxHash lz4 imgui DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+# for backward-cpp (crash backtrace; MIT). Host-only: the engine links this
+# static lib from its unhandled-exception crash reporter (main.cpp).
+add_library(backward STATIC ${CMAKE_CURRENT_SOURCE_DIR}/backward-cpp/backward.cpp)
+target_include_directories(backward PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/backward-cpp>
+  $<INSTALL_INTERFACE:include>
+)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/backward-cpp/backward.hpp
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Development)
+
+install(TARGETS physfs Box2D xxHash lz4 imgui backward DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
 
 if(NOT EVENGINE_WEBGPU_TRIM)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)
