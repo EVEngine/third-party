@@ -52,6 +52,10 @@ const SQChar* namedParameters(HSQUIRRELVM, const SQChar* callee, SQInteger index
     return index >= 0 && index < 2 ? names[index] : nullptr;
 }
 
+SQBool annotations(HSQUIRRELVM, const SQChar* annotation, SQUserPointer) {
+    return std::strcmp(annotation, "plugin_asset") == 0 ? SQTrue : SQFalse;
+}
+
 } // namespace
 
 int main() {
@@ -90,6 +94,12 @@ int main() {
     ok = ok && compileFails("function pixelsOnly(value: pixels) {}\npixelsOnly(1m)\n");
     ok = ok && compileFails("local mode: \"idle\" | \"run\" = \"broken\"\n");
     ok = ok && compileFails("function nope() { return await 1 }\n");
+    ok = ok && compileFails("class A { @edtor(\"text\") value = 1 }\n");
+    sq_setannotationresolver(vm, annotations, nullptr);
+    const char* pluginAnnotation = "class A { @plugin_asset(\"texture\") value = 1 }\n";
+    ok = ok && SQ_SUCCEEDED(sq_compilebuffer(
+                   vm, pluginAnnotation, static_cast<SQInteger>(std::strlen(pluginAnnotation)),
+                   "plugin_annotation.nut", SQFalse));
     ok = ok && compileFails(
                    "function setMode(mode: \"idle\" | \"run\") {}\nsetMode(\"broken\")\n");
     ok = ok && compileFails("function choose(mode: \"idle\" | \"run\") {\n"

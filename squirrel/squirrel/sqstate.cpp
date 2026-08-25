@@ -20,6 +20,8 @@ SQSharedState::SQSharedState()
     _modulehandleruser = NULL;
     _namedargresolver = NULL;
     _namedarguser = NULL;
+    _annotationresolver = NULL;
+    _annotationuser = NULL;
     _printfunc = NULL;
     _errorfunc = NULL;
     _debuginfo = false;

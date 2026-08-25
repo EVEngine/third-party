@@ -110,6 +110,8 @@ public:
     SQUserPointer _modulehandleruser;
     SQNAMEDARGRESOLVER _namedargresolver;
     SQUserPointer _namedarguser;
+    SQANNOTATIONRESOLVER _annotationresolver;
+    SQUserPointer _annotationuser;
     SQPRINTFUNCTION _printfunc;
     SQPRINTFUNCTION _errorfunc;
     bool _debuginfo;

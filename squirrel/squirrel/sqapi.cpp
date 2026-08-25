@@ -1271,6 +1271,12 @@ void sq_setnamedargresolver(HSQUIRRELVM v,SQNAMEDARGRESOLVER resolver,SQUserPoin
     _ss(v)->_namedarguser = user;
 }
 
+void sq_setannotationresolver(HSQUIRRELVM v,SQANNOTATIONRESOLVER resolver,SQUserPointer user)
+{
+    _ss(v)->_annotationresolver = resolver;
+    _ss(v)->_annotationuser = user;
+}
+
 SQRESULT sq_writeclosure(HSQUIRRELVM v,SQWRITEFUNC w,SQUserPointer up)
 {
     SQObjectPtr *o = NULL;

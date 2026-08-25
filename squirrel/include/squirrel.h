@@ -182,6 +182,7 @@ typedef void (*SQDEBUGHOOK)(HSQUIRRELVM /*v*/, SQInteger /*type*/, const SQChar 
 typedef SQRESULT (*SQMODULEDEPENDENCY)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/);
 typedef SQRESULT (*SQMODULEIMPORT)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/, HSQOBJECT * /*exports*/);
 typedef const SQChar *(*SQNAMEDARGRESOLVER)(HSQUIRRELVM /*v*/, const SQChar * /*callee*/, SQInteger /*index*/, const SQChar ** /*unit*/, const SQChar ** /*choices*/, SQUserPointer /*user*/);
+typedef SQBool (*SQANNOTATIONRESOLVER)(HSQUIRRELVM /*v*/, const SQChar * /*annotation*/, SQUserPointer /*user*/);
 typedef SQInteger (*SQWRITEFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 typedef SQInteger (*SQREADFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 
@@ -230,6 +231,7 @@ SQUIRREL_API void sq_notifyallexceptions(HSQUIRRELVM v, SQBool enable);
 SQUIRREL_API void sq_setcompilererrorhandler(HSQUIRRELVM v,SQCOMPILERERROR f);
 SQUIRREL_API void sq_setmodulehandlers(HSQUIRRELVM v,SQMODULEDEPENDENCY dependency,SQMODULEIMPORT importer,SQUserPointer user);
 SQUIRREL_API void sq_setnamedargresolver(HSQUIRRELVM v,SQNAMEDARGRESOLVER resolver,SQUserPointer user);
+SQUIRREL_API void sq_setannotationresolver(HSQUIRRELVM v,SQANNOTATIONRESOLVER resolver,SQUserPointer user);
 
 /*stack operations*/
 SQUIRREL_API void sq_push(HSQUIRRELVM v,SQInteger idx);

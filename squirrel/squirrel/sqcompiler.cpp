@@ -1377,6 +1377,11 @@ public:
         while(_token == _SC('@')) {
             Lex();
             SQObject annotation = Expect(TK_IDENTIFIER);
+            const bool builtin = scstrcmp(_stringval(annotation), _SC("editor")) == 0 ||
+                                 scstrcmp(_stringval(annotation), _SC("unit")) == 0;
+            if(!builtin && (!_ss(_vm)->_annotationresolver ||
+               !_ss(_vm)->_annotationresolver(_vm, _stringval(annotation), _ss(_vm)->_annotationuser)))
+                Error(_SC("unknown annotation '%s'"), _stringval(annotation));
             Expect(_SC('('));
             bool first = true;
             while(_token != _SC(')')) {
