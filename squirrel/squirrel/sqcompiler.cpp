@@ -1927,8 +1927,27 @@ public:
     }
     void PersistStatement()
     {
-        if(_fs->_parent != NULL) Error(_SC("persist is only allowed at root scope"));
         Lex();
+        // `persist` remains a valid Squirrel identifier.  In particular, the
+        // engine's legacy bootstrap defines it with `persist <- function ...`.
+        // Only treat the token as the EveScript declaration when an identifier
+        // follows it.
+        if(_token == TK_NEWSLOT || _token == _SC('=')) {
+            SQOpcode assignment = _token == TK_NEWSLOT ? _OP_NEWSLOT : _OP_SET;
+            SQInteger root = _fs->PushTarget();
+            _fs->AddInstruction(_OP_LOADROOT, root);
+            SQInteger key = _fs->PushTarget();
+            _fs->AddInstruction(_OP_LOAD, key,
+                                _fs->GetConstant(_fs->CreateString(_SC("persist"), 7)));
+            Lex();
+            Expression();
+            SQInteger value = _fs->PopTarget();
+            _fs->AddInstruction(assignment, 0xFF, root, key, value);
+            _fs->PopTarget();
+            _fs->PopTarget();
+            return;
+        }
+        if(_fs->_parent != NULL) Error(_SC("persist is only allowed at root scope"));
         SQObject id = Expect(TK_IDENTIFIER);
         OptionalTypeAnnotation();
         Expect(_SC('='));

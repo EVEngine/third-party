@@ -99,7 +99,7 @@ persist saved_score: int = make_score()
 assert(saved_score == 7)
 assert(persist_initializers == 1)
 
-function persist(name, initializer) {
+persist <- function(name, initializer) {
     return initializer()
 }
 local legacy_persist = persist("legacy", function() { return 11 })
