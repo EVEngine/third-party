@@ -104,6 +104,7 @@ public:
         _sourcename = SQString::Create(_ss(v), sourcename);
         _lineinfo = lineinfo;_raiseerror = raiseerror;
         _allowtypeannotation = true;
+        _asyncdepth = 0;
         _expectedunit = UNIT_NONE;
         _scope.outers = 0;
         _scope.stacksize = 0;
@@ -350,6 +351,9 @@ public:
             break;
         case TK_FUNCTION:
             FunctionStatement();
+            break;
+        case TK_ASYNC:
+            AsyncFunctionStatement();
             break;
         case TK_CLASS:
             ClassStatement();
@@ -941,6 +945,21 @@ public:
             _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(_fs->CreateString(_lex._svalue,_lex._longstr.size()-1)));
             Lex();
             break;
+        case TK_AWAIT:{
+            if(_asyncdepth == 0) Error(_SC("await is only allowed inside async function"));
+            Lex();
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(),
+                                _fs->GetConstant(_fs->CreateString(_SC("suspend"))));
+            Emit2ArgsOP(_OP_GET);
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            PrefixedExpr();
+            _fs->PopTarget();
+            SQInteger stackbase = _fs->PopTarget();
+            SQInteger closure = _fs->PopTarget();
+            _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, 2);
+            }
+            break;
         case TK_BASE:
             Lex();
             _fs->AddInstruction(_OP_GETBASE, _fs->PushTarget());
@@ -1419,8 +1438,19 @@ public:
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
                 CreateFunction(id);
                 _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
-                                }
+                }
                                 break;
+            case TK_ASYNC:{
+                Lex();
+                if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+                Lex();
+                SQObject id = Expect(TK_IDENTIFIER);
+                Expect(_SC('('));
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
+                CreateFunction(id, false, true);
+                _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
+                }
+                break;
             case _SC('['):
                 Lex(); CommaExpr(); Expect(_SC(']'));
                 Expect(_SC('=')); Expression();
@@ -1934,6 +1964,12 @@ public:
             FunctionStatement(&name);
             EmitNamedExport(name);
         }
+        else if(_token == TK_ASYNC) {
+            Lex();
+            if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+            FunctionStatement(&name, true);
+            EmitNamedExport(name);
+        }
         else if(_token == TK_CLASS) {
             ClassStatement(&name);
             EmitNamedExport(name);
@@ -1956,7 +1992,13 @@ public:
             Error(_SC("export requires a function, class, or const declaration"));
         }
     }
-    void FunctionStatement(SQObject *declared = NULL)
+    void AsyncFunctionStatement()
+    {
+        Lex();
+        if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+        FunctionStatement(NULL, true);
+    }
+    void FunctionStatement(SQObject *declared = NULL, bool async = false)
     {
         SQObject id;
         Lex(); id = Expect(TK_IDENTIFIER);
@@ -1972,7 +2014,7 @@ public:
             if(_token == TK_DOUBLE_COLON) Emit2ArgsOP(_OP_GET);
         }
         Expect(_SC('('));
-        CreateFunction(id);
+        CreateFunction(id, false, async);
         _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
         EmitDerefOp(_OP_NEWSLOT);
         _fs->PopTarget();
@@ -2173,7 +2215,7 @@ public:
         }
         _es = es;
     }
-    void CreateFunction(SQObject &name,bool lambda = false)
+    void CreateFunction(SQObject &name,bool lambda = false, bool async = false)
     {
         const auto previousChoiceSymbols = _choiceSymbols;
         SQFuncState *funcstate = _fs->PushChildState(_ss(_vm));
@@ -2231,7 +2273,41 @@ public:
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
-        if(lambda) {
+        if(async) {
+            SQFuncState *asyncstate = _fs->PushChildState(_ss(_vm));
+            asyncstate->_name = _fs->CreateString(_SC("__eve_async_body"));
+            asyncstate->AddParameter(_fs->CreateString(_SC("this")));
+            asyncstate->_sourcename = _sourcename;
+            _fs = asyncstate;
+            ++_asyncdepth;
+            Statement(false);
+            --_asyncdepth;
+            asyncstate->AddLineInfos(_lex._prevtoken == _SC('\n')?_lex._lasttokenline:_lex._currentline, _lineinfo, true);
+            asyncstate->AddInstruction(_OP_RETURN, -1);
+            asyncstate->SetStackSize(0);
+            SQFunctionProto *asyncfunc = asyncstate->BuildProto();
+#ifdef _DEBUG_DUMP
+            asyncstate->Dump(asyncfunc);
+#endif
+            _fs = funcstate;
+            _fs->_functions.push_back(asyncfunc);
+            _fs->PopChildState();
+
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(),
+                                _fs->GetConstant(_fs->CreateString(_SC("__eve_async"))));
+            Emit2ArgsOP(_OP_GET);
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
+            _fs->AddInstruction(_OP_MOVE, _fs->PushTarget(), 0);
+            _fs->PopTarget();
+            _fs->PopTarget();
+            SQInteger stackbase = _fs->PopTarget();
+            SQInteger closure = _fs->PopTarget();
+            _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, 3);
+            _fs->AddInstruction(_OP_RETURN, 1, _fs->PopTarget(), _fs->GetStackSize());
+        }
+        else if(lambda) {
             Expression();
             _fs->AddInstruction(_OP_RETURN, 1, _fs->PopTarget());}
         else {
@@ -2278,6 +2354,7 @@ private:
     bool _lineinfo;
     bool _raiseerror;
     bool _allowtypeannotation;
+    SQInteger _asyncdepth;
     SQScriptUnit _expectedunit;
     std::vector<std::basic_string<SQChar> > _expectedchoices;
     std::map<std::basic_string<SQChar>, std::vector<std::basic_string<SQChar> > > _choiceSymbols;

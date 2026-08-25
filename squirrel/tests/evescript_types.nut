@@ -2,6 +2,21 @@ local speed: float = 180.0
 local targets: Array<string> = ["one", "two"]
 local state: "idle" | "running" = "idle"
 
+function __eve_async(body, environment) {
+    local coroutine = newthread(body.bindenv(environment))
+    local value = coroutine.call()
+    while (coroutine.getstatus() == "suspended")
+        value = coroutine.wakeup(value)
+    return value
+}
+
+async function async_sum(limit: int) -> int {
+    local total = 0
+    for (local i = 0; i < limit; ++i)
+        total += await i
+    return total
+}
+
 function choose(value: string?, fallback: string) -> string {
     return value == null ? fallback : value
 }
@@ -22,6 +37,7 @@ class Actor {
 assert(speed == 180.0)
 assert(targets.len() == 2)
 assert(state == "idle")
+assert(async_sum(4) == 6)
 assert(choose(null, "fallback") == "fallback")
 root_actor: Actor? <- Actor()
 assert(root_actor.name == "Ada")

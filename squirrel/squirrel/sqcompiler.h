@@ -82,6 +82,8 @@ struct SQVM;
 #define TK_EXPORT 334
 #define TK_FROM 335
 #define TK_AS 336
+#define TK_ASYNC 337
+#define TK_AWAIT 338
 
 
 
