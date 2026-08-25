@@ -254,6 +254,8 @@ public:
         case TK_SWITCH: SwitchStatement();      break;
         case TK_MATCH:   MatchStatement();       break;
         case TK_PERSIST: PersistStatement();     break;
+        case TK_IMPORT:  ImportStatement();      break;
+        case TK_EXPORT:  ExportStatement();      break;
         case TK_LOCAL:      LocalDeclStatement();   break;
         case TK_RETURN:
         case TK_YIELD: {
@@ -1535,10 +1537,120 @@ public:
         _fs->SetInstructionParam(endjump, 1, _fs->GetCurrentPos() - endjump);
         _fs->SetStackSize(oldstack);
     }
-    void FunctionStatement()
+    void EmitImport(const SQObject &specifier, const SQObject &imported, const SQObject &local)
+    {
+        SQInteger module = _fs->PushTarget();
+        _fs->AddInstruction(_OP_IMPORT, module, _fs->GetConstant(specifier));
+        if(sq_type(imported) != OT_NULL) {
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(imported));
+            Emit2ArgsOP(_OP_GET);
+        }
+        _fs->PopTarget();
+        _fs->PushLocalVariable(local);
+    }
+    void ImportStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("import is only allowed at module root scope"));
+        Lex();
+        SQObjectPtrVec imported;
+        SQObjectPtrVec locals;
+        bool moduleNamespace = false;
+
+        if(_token == _SC('{')) {
+            Lex();
+            while(_token != _SC('}')) {
+                SQObject name = Expect(TK_IDENTIFIER);
+                SQObject local = name;
+                if(_token == TK_AS) {
+                    Lex();
+                    local = Expect(TK_IDENTIFIER);
+                }
+                imported.push_back(name);
+                locals.push_back(local);
+                if(_token == _SC(',')) Lex();
+                else if(_token != _SC('}')) Error(_SC("expected '}' or ',' in import list"));
+            }
+            Expect(_SC('}'));
+        }
+        else if(_token == _SC('*')) {
+            moduleNamespace = true;
+            Lex();
+            Expect(TK_AS);
+            locals.push_back(Expect(TK_IDENTIFIER));
+        }
+        else {
+            Error(_SC("expected '{' or '*' after import"));
+        }
+
+        Expect(TK_FROM);
+        SQObject specifier = Expect(TK_STRING_LITERAL);
+        if(_ss(_vm)->_moduledependencyhandler &&
+            SQ_FAILED(_ss(_vm)->_moduledependencyhandler(_vm, _stringval(_sourcename),
+                _stringval(specifier), _ss(_vm)->_modulehandleruser))) {
+            Error(_SC("unable to resolve imported module '%s'"), _stringval(specifier));
+        }
+
+        if(moduleNamespace) {
+            SQObject nullname;
+            nullname._type = OT_NULL;
+            nullname._unVal.raw = 0;
+            EmitImport(specifier, nullname, locals[0]);
+        }
+        else {
+            for(SQUnsignedInteger i = 0; i < imported.size(); ++i)
+                EmitImport(specifier, imported[i], locals[i]);
+        }
+    }
+    void EmitExport(const SQObject &name, SQInteger value)
+    {
+        _fs->AddInstruction(_OP_EXPORT, 0xFF, _fs->GetConstant(name), value);
+    }
+    void EmitNamedExport(const SQObject &name)
+    {
+        SQInteger root = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOADROOT, root);
+        SQInteger key = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOAD, key, _fs->GetConstant(name));
+        Emit2ArgsOP(_OP_GET);
+        SQInteger value = _fs->PopTarget();
+        EmitExport(name, value);
+    }
+    void ExportStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("export is only allowed at module root scope"));
+        Lex();
+        SQObject name;
+        if(_token == TK_FUNCTION) {
+            FunctionStatement(&name);
+            EmitNamedExport(name);
+        }
+        else if(_token == TK_CLASS) {
+            ClassStatement(&name);
+            EmitNamedExport(name);
+        }
+        else if(_token == TK_CONST) {
+            Lex();
+            name = Expect(TK_IDENTIFIER);
+            Expect(_SC('='));
+            SQObject value = ExpectScalar();
+            SQTable *constants = _table(_ss(_vm)->_consts);
+            SQObjectPtr strongname = name;
+            constants->NewSlot(strongname, SQObjectPtr(value));
+            strongname.Null();
+            SQInteger target = _fs->PushTarget();
+            _fs->AddInstruction(_OP_LOAD, target, _fs->GetConstant(value));
+            EmitExport(name, target);
+            _fs->PopTarget();
+        }
+        else {
+            Error(_SC("export requires a function, class, or const declaration"));
+        }
+    }
+    void FunctionStatement(SQObject *declared = NULL)
     {
         SQObject id;
         Lex(); id = Expect(TK_IDENTIFIER);
+        if(declared) *declared = id;
         _fs->PushTarget(0);
         _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
         if(_token == TK_DOUBLE_COLON) Emit2ArgsOP(_OP_GET);
@@ -1555,10 +1667,14 @@ public:
         EmitDerefOp(_OP_NEWSLOT);
         _fs->PopTarget();
     }
-    void ClassStatement()
+    void ClassStatement(SQObject *declared = NULL)
     {
         SQExpState es;
         Lex();
+        if(declared) {
+            if(_token != TK_IDENTIFIER) Error(_SC("exported class name must be an identifier"));
+            *declared = _fs->CreateString(_lex._svalue);
+        }
         es = _es;
         _es.donot_get = true;
         PrefixedExpr();

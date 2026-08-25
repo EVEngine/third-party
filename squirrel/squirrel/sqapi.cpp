@@ -1258,6 +1258,13 @@ void sq_setcompilererrorhandler(HSQUIRRELVM v,SQCOMPILERERROR f)
     _ss(v)->_compilererrorhandler = f;
 }
 
+void sq_setmodulehandlers(HSQUIRRELVM v,SQMODULEDEPENDENCY dependency,SQMODULEIMPORT importer,SQUserPointer user)
+{
+    _ss(v)->_moduledependencyhandler = dependency;
+    _ss(v)->_moduleimporthandler = importer;
+    _ss(v)->_modulehandleruser = user;
+}
+
 SQRESULT sq_writeclosure(HSQUIRRELVM v,SQWRITEFUNC w,SQUserPointer up)
 {
     SQObjectPtr *o = NULL;

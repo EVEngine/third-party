@@ -83,4 +83,12 @@ persist saved_score: int = make_score()
 assert(saved_score == 7)
 assert(persist_initializers == 1)
 
+__exports <- {}
+export const EXPORTED_VALUE = 9
+export function exported_twice(value: int) -> int { return value * 2 }
+export class ExportedType { value: int = 5 }
+assert(__exports.EXPORTED_VALUE == 9)
+assert(__exports.exported_twice(3) == 6)
+assert(__exports.ExportedType().value == 5)
+
 print("evescript type erasure: ok\n")

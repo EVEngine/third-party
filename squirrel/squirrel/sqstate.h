@@ -105,6 +105,9 @@ public:
     static const SQRegFunction _weakref_default_delegate_funcz[];
 
     SQCOMPILERERROR _compilererrorhandler;
+    SQMODULEDEPENDENCY _moduledependencyhandler;
+    SQMODULEIMPORT _moduleimporthandler;
+    SQUserPointer _modulehandleruser;
     SQPRINTFUNCTION _printfunc;
     SQPRINTFUNCTION _errorfunc;
     bool _debuginfo;

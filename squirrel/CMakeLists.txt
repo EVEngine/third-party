@@ -44,6 +44,9 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Android"
   if(BUILD_TESTING)
     add_test(NAME evescript.types
       COMMAND $<TARGET_FILE:sq_static> "${CMAKE_CURRENT_SOURCE_DIR}/tests/evescript_types.nut")
+    add_executable(evescript_modules_test tests/evescript_modules.cpp)
+    target_link_libraries(evescript_modules_test PRIVATE squirrel_static sqstdlib_static)
+    add_test(NAME evescript.modules COMMAND evescript_modules_test)
   endif()
 endif()
 

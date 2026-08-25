@@ -15,6 +15,9 @@
 SQSharedState::SQSharedState()
 {
     _compilererrorhandler = NULL;
+    _moduledependencyhandler = NULL;
+    _moduleimporthandler = NULL;
+    _modulehandleruser = NULL;
     _printfunc = NULL;
     _errorfunc = NULL;
     _debuginfo = false;

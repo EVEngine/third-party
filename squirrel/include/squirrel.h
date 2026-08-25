@@ -179,6 +179,8 @@ typedef SQInteger (*SQRELEASEHOOK)(SQUserPointer,SQInteger size);
 typedef void (*SQCOMPILERERROR)(HSQUIRRELVM,const SQChar * /*desc*/,const SQChar * /*source*/,SQInteger /*line*/,SQInteger /*column*/);
 typedef void (*SQPRINTFUNCTION)(HSQUIRRELVM,const SQChar * ,...);
 typedef void (*SQDEBUGHOOK)(HSQUIRRELVM /*v*/, SQInteger /*type*/, const SQChar * /*sourcename*/, SQInteger /*line*/, const SQChar * /*funcname*/);
+typedef SQRESULT (*SQMODULEDEPENDENCY)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/);
+typedef SQRESULT (*SQMODULEIMPORT)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/, HSQOBJECT * /*exports*/);
 typedef SQInteger (*SQWRITEFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 typedef SQInteger (*SQREADFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 
@@ -225,6 +227,7 @@ SQUIRREL_API SQRESULT sq_compilebuffer(HSQUIRRELVM v,const SQChar *s,SQInteger s
 SQUIRREL_API void sq_enabledebuginfo(HSQUIRRELVM v, SQBool enable);
 SQUIRREL_API void sq_notifyallexceptions(HSQUIRRELVM v, SQBool enable);
 SQUIRREL_API void sq_setcompilererrorhandler(HSQUIRRELVM v,SQCOMPILERERROR f);
+SQUIRREL_API void sq_setmodulehandlers(HSQUIRRELVM v,SQMODULEDEPENDENCY dependency,SQMODULEIMPORT importer,SQUserPointer user);
 
 /*stack operations*/
 SQUIRREL_API void sq_push(HSQUIRRELVM v,SQInteger idx);
