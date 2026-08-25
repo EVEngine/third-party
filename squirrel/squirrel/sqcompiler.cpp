@@ -49,7 +49,9 @@ enum SQScriptUnit {
 
 struct SQFunctionParameter {
     std::basic_string<SQChar> name;
-    SQScriptUnit unit;
+    std::basic_string<SQChar> type;
+    bool nullable = true;
+    SQScriptUnit unit = UNIT_NONE;
     std::vector<std::basic_string<SQChar> > choices;
 };
 
@@ -106,6 +108,8 @@ public:
         _allowtypeannotation = true;
         _asyncdepth = 0;
         _expectedunit = UNIT_NONE;
+        _expectedtype.clear();
+        _expectednullable = true;
         _scope.outers = 0;
         _scope.stacksize = 0;
         _compilererror[0] = _SC('\0');
@@ -186,17 +190,22 @@ public:
         if(scstrcmp(name, _SC("meters")) == 0) return UNIT_METERS;
         return UNIT_NONE;
     }
-    SQScriptUnit TypeRef(std::vector<std::basic_string<SQChar> > *choices = NULL)
+    SQScriptUnit TypeRef(std::vector<std::basic_string<SQChar> > *choices = NULL,
+                         std::basic_string<SQChar> *type = NULL, bool *nullable = NULL)
     {
         SQScriptUnit unit = UNIT_NONE;
         if(_token == TK_STRING_LITERAL) {
+            if(type != NULL) *type = _SC("string");
             if(choices != NULL)
                 choices->push_back(std::basic_string<SQChar>(_lex._svalue,
                                                              _lex._longstr.size() - 1));
             Lex();
         }
         else {
-            if(_token == TK_IDENTIFIER) unit = UnitFromName(_lex._svalue);
+            if(_token == TK_IDENTIFIER) {
+                unit = UnitFromName(_lex._svalue);
+                if(type != NULL) *type = _lex._svalue;
+            }
             Expect(TK_IDENTIFIER);
             while(_token == _SC('.')) {
                 Lex();
@@ -212,7 +221,11 @@ public:
                 Expect(_SC('>'));
             }
         }
-        if(_token == _SC('?')) Lex();
+        if(nullable != NULL) *nullable = false;
+        if(_token == _SC('?')) {
+            if(nullable != NULL) *nullable = true;
+            Lex();
+        }
         while(_token == _SC('|')) {
             Lex();
             TypeRef(choices);
@@ -220,11 +233,12 @@ public:
         return unit;
     }
     SQScriptUnit OptionalTypeAnnotation(
-        std::vector<std::basic_string<SQChar> > *choices = NULL)
+        std::vector<std::basic_string<SQChar> > *choices = NULL,
+        std::basic_string<SQChar> *type = NULL, bool *nullable = NULL)
     {
         if(_token == _SC(':')) {
             Lex();
-            return TypeRef(choices);
+            return TypeRef(choices, type, nullable);
         }
         return UNIT_NONE;
     }
@@ -461,12 +475,14 @@ public:
          SQExpState es = _es;
         SQScriptUnit assignmentUnit = UNIT_NONE;
         std::vector<std::basic_string<SQChar> > assignmentChoices;
+        std::basic_string<SQChar> assignmentType;
+        bool assignmentNullable = true;
         _es.etype     = EXPR;
         _es.epos      = -1;
         _es.donot_get = false;
         NullCoalesceExp();
         if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
-            assignmentUnit = OptionalTypeAnnotation(&assignmentChoices);
+            assignmentUnit = OptionalTypeAnnotation(&assignmentChoices, &assignmentType, &assignmentNullable);
         }
         switch(_token)  {
         case _SC('='):
@@ -484,11 +500,17 @@ public:
             Lex();
             SQScriptUnit previousUnit = _expectedunit;
             std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+            std::basic_string<SQChar> previousType = _expectedtype;
+            bool previousNullable = _expectednullable;
             if(assignmentUnit != UNIT_NONE) _expectedunit = assignmentUnit;
             if(!assignmentChoices.empty()) _expectedchoices = assignmentChoices;
+            _expectedtype = assignmentType;
+            _expectednullable = assignmentNullable;
             Expression();
             _expectedunit = previousUnit;
             _expectedchoices = previousChoices;
+            _expectedtype = previousType;
+            _expectednullable = previousNullable;
 
             switch(op){
             case TK_NEWSLOT:
@@ -928,6 +950,19 @@ public:
     }
     SQInteger Factor()
     {
+        if(!_expectedtype.empty()) {
+            const bool wantsString = _expectedtype == _SC("string");
+            const bool wantsBool = _expectedtype == _SC("bool");
+            const bool wantsInt = _expectedtype == _SC("int");
+            const bool wantsFloat = _expectedtype == _SC("float");
+            if(_token == TK_NULL && !_expectednullable)
+                Error(_SC("value is not assignable to the declared type"));
+            if((wantsString && (_token == TK_INTEGER || _token == TK_FLOAT || _token == TK_TRUE || _token == TK_FALSE)) ||
+               (wantsBool && (_token == TK_INTEGER || _token == TK_FLOAT || _token == TK_STRING_LITERAL)) ||
+               (wantsInt && (_token == TK_FLOAT || _token == TK_STRING_LITERAL || _token == TK_TRUE || _token == TK_FALSE)) ||
+               (wantsFloat && (_token == TK_STRING_LITERAL || _token == TK_TRUE || _token == TK_FALSE)))
+                Error(_SC("value is not assignable to the declared type"));
+        }
         //_es.etype = EXPR;
         switch(_token)
         {
@@ -1195,15 +1230,21 @@ public:
              }
              SQScriptUnit previousUnit = _expectedunit;
              std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+             std::basic_string<SQChar> previousType = _expectedtype;
+             bool previousNullable = _expectednullable;
              if(callSignature != NULL && parameterIndex >= 0 &&
                 static_cast<SQUnsignedInteger>(parameterIndex) < callSignature->parameters.size()) {
                  _expectedunit = callSignature->parameters[parameterIndex].unit;
+                 _expectedtype = callSignature->parameters[parameterIndex].type;
+                 _expectednullable = callSignature->parameters[parameterIndex].nullable;
                  if(!callSignature->parameters[parameterIndex].choices.empty())
                      _expectedchoices = callSignature->parameters[parameterIndex].choices;
              }
              Expression();
              _expectedunit = previousUnit;
              _expectedchoices = previousChoices;
+             _expectedtype = previousType;
+             _expectednullable = previousNullable;
              MoveIfCurrentTargetIsLocal();
              argumentNames.push_back(argumentName);
              argumentTargets.push_back(_fs->TopTarget());
@@ -1315,12 +1356,16 @@ public:
             for(SQInteger index = 0;; ++index) {
                 const SQChar *unitName = NULL;
                 const SQChar *choiceNames = NULL;
+                const SQChar *typeName = NULL;
+                SQBool nullable = SQTrue;
                 const SQChar *parameter = _ss(_vm)->_namedargresolver(
-                    _vm, signature.name.c_str(), index, &unitName, &choiceNames,
+                    _vm, signature.name.c_str(), index, &typeName, &nullable, &unitName, &choiceNames,
                     _ss(_vm)->_namedarguser);
                 if(parameter == NULL) break;
                 SQFunctionParameter resolved;
                 resolved.name = parameter;
+                resolved.type = typeName == NULL ? _SC("") : typeName;
+                resolved.nullable = nullable != SQFalse;
                 resolved.unit = unitName == NULL ? UNIT_NONE : UnitFromName(unitName);
                 if(choiceNames != NULL) {
                     const SQChar *begin = choiceNames;
@@ -1344,7 +1389,9 @@ public:
 
     void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters,
                            const sqvector<SQScriptUnit> &units,
-                           const std::vector<std::vector<std::basic_string<SQChar> > > &choices)
+                           const std::vector<std::vector<std::basic_string<SQChar> > > &choices,
+                           const std::vector<std::basic_string<SQChar> > &types,
+                           const std::vector<bool> &nullable)
     {
         if(sq_type(name) != OT_STRING) return;
         for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
@@ -1353,6 +1400,8 @@ public:
                 for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
                     SQFunctionParameter parameter;
                     parameter.name = _stringval(parameters[p]);
+                    parameter.type = types[p];
+                    parameter.nullable = nullable[p];
                     parameter.unit = units[p];
                     parameter.choices = choices[p];
                     _signatures[i].parameters.push_back(parameter);
@@ -1365,6 +1414,8 @@ public:
         for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
             SQFunctionParameter parameter;
             parameter.name = _stringval(parameters[p]);
+            parameter.type = types[p];
+            parameter.nullable = nullable[p];
             parameter.unit = units[p];
             parameter.choices = choices[p];
             signature.parameters.push_back(parameter);
@@ -1470,15 +1521,24 @@ public:
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
                 {
                 std::vector<std::basic_string<SQChar> > declaredChoices;
-                SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices);
+                std::basic_string<SQChar> declaredType;
+                bool declaredNullable = true;
+                SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices, &declaredType,
+                                                                    &declaredNullable);
                 Expect(_SC('='));
                 SQScriptUnit previousUnit = _expectedunit;
                 std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+                std::basic_string<SQChar> previousType = _expectedtype;
+                bool previousNullable = _expectednullable;
                 if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
                 if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
+                _expectedtype = declaredType;
+                _expectednullable = declaredNullable;
                 Expression();
                 _expectedunit = previousUnit;
                 _expectedchoices = previousChoices;
+                _expectedtype = previousType;
+                _expectednullable = previousNullable;
                 }
             }
             if(_token == separator) Lex();//optional comma/semicolon
@@ -1519,7 +1579,10 @@ public:
         do {
             varname = Expect(TK_IDENTIFIER);
             std::vector<std::basic_string<SQChar> > declaredChoices;
-            SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices);
+            std::basic_string<SQChar> declaredType;
+            bool declaredNullable = true;
+            SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices, &declaredType,
+                                                                &declaredNullable);
             if(!declaredChoices.empty())
                 _choiceSymbols[_stringval(varname)] = declaredChoices;
             else
@@ -1528,11 +1591,17 @@ public:
                 Lex();
                 SQScriptUnit previousUnit = _expectedunit;
                 std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+                std::basic_string<SQChar> previousType = _expectedtype;
+                bool previousNullable = _expectednullable;
                 if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
                 if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
+                _expectedtype = declaredType;
+                _expectednullable = declaredNullable;
                 Expression();
                 _expectedunit = previousUnit;
                 _expectedchoices = previousChoices;
+                _expectedtype = previousType;
+                _expectednullable = previousNullable;
                 SQInteger src = _fs->PopTarget();
                 SQInteger dest = _fs->PushTarget();
                 if(dest != src) _fs->AddInstruction(_OP_MOVE, dest, src);
@@ -2232,6 +2301,8 @@ public:
         SQObjectPtrVec signatureParameters;
         sqvector<SQScriptUnit> signatureUnits;
         std::vector<std::vector<std::basic_string<SQChar> > > signatureChoices;
+        std::vector<std::basic_string<SQChar> > signatureTypes;
+        std::vector<bool> signatureNullable;
         while(_token!=_SC(')')) {
             if(_token == TK_VARPARAMS) {
                 if(defparams > 0) Error(_SC("function with default parameters cannot have variable number of parameters"));
@@ -2244,11 +2315,16 @@ public:
             else {
                 paramname = Expect(TK_IDENTIFIER);
                 std::vector<std::basic_string<SQChar> > parameterChoices;
-                SQScriptUnit parameterUnit = OptionalTypeAnnotation(&parameterChoices);
+                std::basic_string<SQChar> parameterType;
+                bool parameterNullable = true;
+                SQScriptUnit parameterUnit = OptionalTypeAnnotation(&parameterChoices, &parameterType,
+                                                                     &parameterNullable);
                 funcstate->AddParameter(paramname);
                 signatureParameters.push_back(paramname);
                 signatureUnits.push_back(parameterUnit);
                 signatureChoices.push_back(parameterChoices);
+                signatureTypes.push_back(parameterType);
+                signatureNullable.push_back(parameterNullable);
                 if(!parameterChoices.empty())
                     _choiceSymbols[_stringval(paramname)] = parameterChoices;
                 else
@@ -2274,7 +2350,8 @@ public:
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
-        RegisterSignature(name, signatureParameters, signatureUnits, signatureChoices);
+        RegisterSignature(name, signatureParameters, signatureUnits, signatureChoices,
+                          signatureTypes, signatureNullable);
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
@@ -2361,6 +2438,8 @@ private:
     bool _allowtypeannotation;
     SQInteger _asyncdepth;
     SQScriptUnit _expectedunit;
+    std::basic_string<SQChar> _expectedtype;
+    bool _expectednullable;
     std::vector<std::basic_string<SQChar> > _expectedchoices;
     std::map<std::basic_string<SQChar>, std::vector<std::basic_string<SQChar> > > _choiceSymbols;
     SQInteger _debugline;

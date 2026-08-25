@@ -45,9 +45,11 @@ SQRESULT importModule(HSQUIRRELVM vm, const SQChar*, const SQChar* specifier,
 }
 
 const SQChar* namedParameters(HSQUIRRELVM, const SQChar* callee, SQInteger index,
-                              const SQChar**, const SQChar**, SQUserPointer) {
+                              const SQChar** type, SQBool* nullable, const SQChar**, const SQChar**, SQUserPointer) {
     if (std::strcmp(callee, "nativeCall") != 0)
         return nullptr;
+    if (type) *type = "int";
+    if (nullable) *nullable = SQFalse;
     static const char* names[] = {"first", "second"};
     return index >= 0 && index < 2 ? names[index] : nullptr;
 }
@@ -94,6 +96,9 @@ int main() {
     ok = ok && compileFails("function pixelsOnly(value: pixels) {}\npixelsOnly(1m)\n");
     ok = ok && compileFails("local mode: \"idle\" | \"run\" = \"broken\"\n");
     ok = ok && compileFails("function nope() { return await 1 }\n");
+    ok = ok && compileFails("local count: int = \"many\"\n");
+    ok = ok && compileFails("local count: int = null\n");
+    ok = ok && compileFails("function count(value: int) {}\ncount(1.5)\n");
     ok = ok && compileFails("class A { @edtor(\"text\") value = 1 }\n");
     sq_setannotationresolver(vm, annotations, nullptr);
     const char* pluginAnnotation = "class A { @plugin_asset(\"texture\") value = 1 }\n";
@@ -111,6 +116,7 @@ int main() {
     ok = ok && SQ_SUCCEEDED(sq_compilebuffer(
                    vm, nativeNamed, static_cast<SQInteger>(std::strlen(nativeNamed)),
                    "native_named.nut", SQFalse));
+    ok = ok && compileFails("nativeCall(\"one\", 2)\n");
 
     if (!sq_isnull(fixture.exports))
         sq_release(vm, &fixture.exports);
