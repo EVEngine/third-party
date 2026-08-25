@@ -107,6 +107,18 @@ assert(named_order[0] == "third")
 assert(named_order[1] == "first")
 assert(named_order[2] == "second")
 
+local fade_seconds: seconds = 250ms
+local tile_pixels: pixels = 32px
+local height_meters: meters = 1.8m
+function angle_identity(angle: radians) { return angle }
+assert(fade_seconds > 0.249 && fade_seconds < 0.251)
+assert(tile_pixels == 32.0)
+assert(height_meters == 1.8)
+local quarter_turn = angle_identity(90deg)
+assert(quarter_turn > 1.5707 && quarter_turn < 1.5709)
+local raw_milliseconds = 250ms
+assert(raw_milliseconds == 250.0)
+
 __exports <- {}
 export const EXPORTED_VALUE = 9
 export function exported_twice(value: int) -> int { return value * 2 }

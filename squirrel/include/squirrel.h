@@ -181,7 +181,7 @@ typedef void (*SQPRINTFUNCTION)(HSQUIRRELVM,const SQChar * ,...);
 typedef void (*SQDEBUGHOOK)(HSQUIRRELVM /*v*/, SQInteger /*type*/, const SQChar * /*sourcename*/, SQInteger /*line*/, const SQChar * /*funcname*/);
 typedef SQRESULT (*SQMODULEDEPENDENCY)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/);
 typedef SQRESULT (*SQMODULEIMPORT)(HSQUIRRELVM /*v*/, const SQChar * /*importer*/, const SQChar * /*specifier*/, SQUserPointer /*user*/, HSQOBJECT * /*exports*/);
-typedef const SQChar *(*SQNAMEDARGRESOLVER)(HSQUIRRELVM /*v*/, const SQChar * /*callee*/, SQInteger /*index*/, SQUserPointer /*user*/);
+typedef const SQChar *(*SQNAMEDARGRESOLVER)(HSQUIRRELVM /*v*/, const SQChar * /*callee*/, SQInteger /*index*/, const SQChar ** /*unit*/, SQUserPointer /*user*/);
 typedef SQInteger (*SQWRITEFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 typedef SQInteger (*SQREADFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 

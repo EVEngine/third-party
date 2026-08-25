@@ -36,9 +36,24 @@ struct SQScope {
     SQInteger stacksize;
 };
 
+enum SQScriptUnit {
+    UNIT_NONE,
+    UNIT_SECONDS,
+    UNIT_MILLISECONDS,
+    UNIT_RADIANS,
+    UNIT_DEGREES,
+    UNIT_PIXELS,
+    UNIT_METERS
+};
+
+struct SQFunctionParameter {
+    std::basic_string<SQChar> name;
+    SQScriptUnit unit;
+};
+
 struct SQFunctionSignature {
     std::basic_string<SQChar> name;
-    std::vector<std::basic_string<SQChar> > parameters;
+    std::vector<SQFunctionParameter> parameters;
 };
 
 #define BEGIN_SCOPE() SQScope __oldscope__ = _scope; \
@@ -87,6 +102,7 @@ public:
         _sourcename = SQString::Create(_ss(v), sourcename);
         _lineinfo = lineinfo;_raiseerror = raiseerror;
         _allowtypeannotation = true;
+        _expectedunit = UNIT_NONE;
         _scope.outers = 0;
         _scope.stacksize = 0;
         _compilererror[0] = _SC('\0');
@@ -157,12 +173,24 @@ public:
         return ret;
     }
     bool IsEndOfStatement() { return ((_lex._prevtoken == _SC('\n')) || (_token == SQUIRREL_EOB) || (_token == _SC('}')) || (_token == _SC(';'))); }
-    void TypeRef()
+    SQScriptUnit UnitFromName(const SQChar *name) const
     {
+        if(scstrcmp(name, _SC("seconds")) == 0) return UNIT_SECONDS;
+        if(scstrcmp(name, _SC("milliseconds")) == 0) return UNIT_MILLISECONDS;
+        if(scstrcmp(name, _SC("radians")) == 0) return UNIT_RADIANS;
+        if(scstrcmp(name, _SC("degrees")) == 0) return UNIT_DEGREES;
+        if(scstrcmp(name, _SC("pixels")) == 0) return UNIT_PIXELS;
+        if(scstrcmp(name, _SC("meters")) == 0) return UNIT_METERS;
+        return UNIT_NONE;
+    }
+    SQScriptUnit TypeRef()
+    {
+        SQScriptUnit unit = UNIT_NONE;
         if(_token == TK_STRING_LITERAL) {
             Lex();
         }
         else {
+            if(_token == TK_IDENTIFIER) unit = UnitFromName(_lex._svalue);
             Expect(TK_IDENTIFIER);
             while(_token == _SC('.')) {
                 Lex();
@@ -183,13 +211,15 @@ public:
             Lex();
             TypeRef();
         }
+        return unit;
     }
-    void OptionalTypeAnnotation()
+    SQScriptUnit OptionalTypeAnnotation()
     {
         if(_token == _SC(':')) {
             Lex();
-            TypeRef();
+            return TypeRef();
         }
+        return UNIT_NONE;
     }
     void OptionalSemicolon()
     {
@@ -419,12 +449,13 @@ public:
     void Expression()
     {
          SQExpState es = _es;
+        SQScriptUnit assignmentUnit = UNIT_NONE;
         _es.etype     = EXPR;
         _es.epos      = -1;
         _es.donot_get = false;
         NullCoalesceExp();
         if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
-            OptionalTypeAnnotation();
+            assignmentUnit = OptionalTypeAnnotation();
         }
         switch(_token)  {
         case _SC('='):
@@ -439,7 +470,11 @@ public:
             SQInteger pos = _es.epos;
             if(ds == EXPR) Error(_SC("can't assign expression"));
             else if(ds == BASE) Error(_SC("'base' cannot be modified"));
-            Lex(); Expression();
+            Lex();
+            SQScriptUnit previousUnit = _expectedunit;
+            if(assignmentUnit != UNIT_NONE) _expectedunit = assignmentUnit;
+            Expression();
+            _expectedunit = previousUnit;
 
             switch(op){
             case TK_NEWSLOT:
@@ -844,6 +879,39 @@ public:
             }
         }
     }
+    void NumericLiteral(bool negative)
+    {
+        const bool wasInteger = _token == TK_INTEGER;
+        const SQInteger integerValue = negative ? -_lex._nvalue : _lex._nvalue;
+        SQFloat value = wasInteger ? static_cast<SQFloat>(_lex._nvalue) : _lex._fvalue;
+        if(negative) value = -value;
+        Lex();
+        SQScriptUnit sourceUnit = UNIT_NONE;
+        if(_token == TK_IDENTIFIER) {
+            if(scstrcmp(_lex._svalue, _SC("ms")) == 0) sourceUnit = UNIT_MILLISECONDS;
+            else if(scstrcmp(_lex._svalue, _SC("deg")) == 0) sourceUnit = UNIT_DEGREES;
+            else if(scstrcmp(_lex._svalue, _SC("px")) == 0) sourceUnit = UNIT_PIXELS;
+            else if(scstrcmp(_lex._svalue, _SC("m")) == 0) sourceUnit = UNIT_METERS;
+            if(sourceUnit != UNIT_NONE) Lex();
+        }
+        if(sourceUnit == UNIT_NONE) {
+            if(wasInteger) EmitLoadConstInt(integerValue, -1);
+            else EmitLoadConstFloat(value, -1);
+            return;
+        }
+        if(sourceUnit != UNIT_NONE && _expectedunit != UNIT_NONE) {
+            if(sourceUnit == UNIT_MILLISECONDS && _expectedunit == UNIT_SECONDS)
+                value *= static_cast<SQFloat>(0.001);
+            else if(sourceUnit == UNIT_DEGREES && _expectedunit == UNIT_RADIANS)
+                value *= static_cast<SQFloat>(3.14159265358979323846 / 180.0);
+            else if(!((sourceUnit == UNIT_MILLISECONDS && _expectedunit == UNIT_MILLISECONDS) ||
+                      (sourceUnit == UNIT_DEGREES && _expectedunit == UNIT_DEGREES) ||
+                      (sourceUnit == UNIT_PIXELS && _expectedunit == UNIT_PIXELS) ||
+                      (sourceUnit == UNIT_METERS && _expectedunit == UNIT_METERS)))
+                Error(_SC("incompatible units"));
+        }
+        EmitLoadConstFloat(value, -1);
+    }
     SQInteger Factor()
     {
         //_es.etype = EXPR;
@@ -954,8 +1022,8 @@ public:
             _fs->AddInstruction(_OP_LOADNULLS, _fs->PushTarget(),1);
             Lex();
             break;
-        case TK_INTEGER: EmitLoadConstInt(_lex._nvalue,-1); Lex();  break;
-        case TK_FLOAT: EmitLoadConstFloat(_lex._fvalue,-1); Lex(); break;
+        case TK_INTEGER:
+        case TK_FLOAT: NumericLiteral(false); break;
         case TK_TRUE: case TK_FALSE:
             _fs->AddInstruction(_OP_LOADBOOL, _fs->PushTarget(),_token == TK_TRUE?1:0);
             Lex();
@@ -986,8 +1054,8 @@ public:
         case _SC('-'):
             Lex();
             switch(_token) {
-            case TK_INTEGER: EmitLoadConstInt(-_lex._nvalue,-1); Lex(); break;
-            case TK_FLOAT: EmitLoadConstFloat(-_lex._fvalue,-1); Lex(); break;
+            case TK_INTEGER:
+            case TK_FLOAT: NumericLiteral(true); break;
             default: UnaryOP(_OP_NEG);
             }
             break;
@@ -1063,6 +1131,7 @@ public:
     void FunctionCallArgs(bool rawcall = false)
     {
         const SQObjectPtr callName = _activecallname;
+        const SQFunctionSignature *callSignature = FindSignature(callName);
         SQInteger nargs = 1;//this
         bool hasNamedArgs = false;
         SQObjectPtrVec argumentNames;
@@ -1074,7 +1143,23 @@ public:
                  Expect(_SC(':'));
                  hasNamedArgs = true;
              }
+             SQInteger parameterIndex = static_cast<SQInteger>(argumentNames.size());
+             if(!sq_isnull(argumentName) && callSignature != NULL) {
+                 parameterIndex = -1;
+                 for(SQUnsignedInteger p = 0; p < callSignature->parameters.size(); ++p) {
+                     if(scstrcmp(_stringval(argumentName),
+                                 callSignature->parameters[p].name.c_str()) == 0) {
+                         parameterIndex = static_cast<SQInteger>(p);
+                         break;
+                     }
+                 }
+             }
+             SQScriptUnit previousUnit = _expectedunit;
+             if(callSignature != NULL && parameterIndex >= 0 &&
+                static_cast<SQUnsignedInteger>(parameterIndex) < callSignature->parameters.size())
+                 _expectedunit = callSignature->parameters[parameterIndex].unit;
              Expression();
+             _expectedunit = previousUnit;
              MoveIfCurrentTargetIsLocal();
              argumentNames.push_back(argumentName);
              argumentTargets.push_back(_fs->TopTarget());
@@ -1087,7 +1172,7 @@ public:
          Lex();
          if(hasNamedArgs) {
              if(rawcall) Error(_SC("rawcall does not support named arguments"));
-             const SQFunctionSignature *signature = FindSignature(callName);
+             const SQFunctionSignature *signature = callSignature;
              if(signature == NULL)
                  Error(_SC("named arguments require a known function or Binding Contract"));
              if(signature->parameters.size() != argumentNames.size())
@@ -1107,7 +1192,7 @@ public:
                      for(SQUnsignedInteger a = 0; a < argumentNames.size(); ++a) {
                          if(used[a] || sq_isnull(argumentNames[a])) continue;
                          if(scstrcmp(_stringval(argumentNames[a]),
-                                     signature->parameters[p].c_str()) == 0) {
+                                     signature->parameters[p].name.c_str()) == 0) {
                              selected = static_cast<SQInteger>(a);
                              break;
                          }
@@ -1184,10 +1269,14 @@ public:
             SQFunctionSignature signature;
             signature.name = _stringval(name);
             for(SQInteger index = 0;; ++index) {
+                const SQChar *unitName = NULL;
                 const SQChar *parameter = _ss(_vm)->_namedargresolver(
-                    _vm, signature.name.c_str(), index, _ss(_vm)->_namedarguser);
+                    _vm, signature.name.c_str(), index, &unitName, _ss(_vm)->_namedarguser);
                 if(parameter == NULL) break;
-                signature.parameters.push_back(parameter);
+                SQFunctionParameter resolved;
+                resolved.name = parameter;
+                resolved.unit = unitName == NULL ? UNIT_NONE : UnitFromName(unitName);
+                signature.parameters.push_back(resolved);
             }
             if(!signature.parameters.empty()) {
                 _signatures.push_back(signature);
@@ -1197,21 +1286,30 @@ public:
         return NULL;
     }
 
-    void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters)
+    void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters,
+                           const sqvector<SQScriptUnit> &units)
     {
         if(sq_type(name) != OT_STRING) return;
         for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
             if(scstrcmp(_signatures[i].name.c_str(), _stringval(name)) == 0) {
                 _signatures[i].parameters.clear();
-                for(SQUnsignedInteger p = 0; p < parameters.size(); ++p)
-                    _signatures[i].parameters.push_back(_stringval(parameters[p]));
+                for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
+                    SQFunctionParameter parameter;
+                    parameter.name = _stringval(parameters[p]);
+                    parameter.unit = units[p];
+                    _signatures[i].parameters.push_back(parameter);
+                }
                 return;
             }
         }
         SQFunctionSignature signature;
         signature.name = _stringval(name);
-        for(SQUnsignedInteger p = 0; p < parameters.size(); ++p)
-            signature.parameters.push_back(_stringval(parameters[p]));
+        for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
+            SQFunctionParameter parameter;
+            parameter.name = _stringval(parameters[p]);
+            parameter.unit = units[p];
+            signature.parameters.push_back(parameter);
+        }
         _signatures.push_back(signature);
     }
     void ParseAnnotations()
@@ -1295,8 +1393,14 @@ public:
                 }
             default :
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
-                OptionalTypeAnnotation();
-                Expect(_SC('=')); Expression();
+                {
+                SQScriptUnit declaredUnit = OptionalTypeAnnotation();
+                Expect(_SC('='));
+                SQScriptUnit previousUnit = _expectedunit;
+                if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                Expression();
+                _expectedunit = previousUnit;
+                }
             }
             if(_token == separator) Lex();//optional comma/semicolon
             nkeys++;
@@ -1335,9 +1439,13 @@ public:
 
         do {
             varname = Expect(TK_IDENTIFIER);
-            OptionalTypeAnnotation();
+            SQScriptUnit declaredUnit = OptionalTypeAnnotation();
             if(_token == _SC('=')) {
-                Lex(); Expression();
+                Lex();
+                SQScriptUnit previousUnit = _expectedunit;
+                if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                Expression();
+                _expectedunit = previousUnit;
                 SQInteger src = _fs->PopTarget();
                 SQInteger dest = _fs->PushTarget();
                 if(dest != src) _fs->AddInstruction(_OP_MOVE, dest, src);
@@ -1998,6 +2106,7 @@ public:
         funcstate->_sourcename = _sourcename;
         SQInteger defparams = 0;
         SQObjectPtrVec signatureParameters;
+        sqvector<SQScriptUnit> signatureUnits;
         while(_token!=_SC(')')) {
             if(_token == TK_VARPARAMS) {
                 if(defparams > 0) Error(_SC("function with default parameters cannot have variable number of parameters"));
@@ -2009,9 +2118,10 @@ public:
             }
             else {
                 paramname = Expect(TK_IDENTIFIER);
-                OptionalTypeAnnotation();
+                SQScriptUnit parameterUnit = OptionalTypeAnnotation();
                 funcstate->AddParameter(paramname);
                 signatureParameters.push_back(paramname);
+                signatureUnits.push_back(parameterUnit);
                 if(_token == _SC('=')) {
                     Lex();
                     Expression();
@@ -2033,7 +2143,7 @@ public:
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
-        RegisterSignature(name, signatureParameters);
+        RegisterSignature(name, signatureParameters, signatureUnits);
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
@@ -2083,6 +2193,7 @@ private:
     bool _lineinfo;
     bool _raiseerror;
     bool _allowtypeannotation;
+    SQScriptUnit _expectedunit;
     SQInteger _debugline;
     SQInteger _debugop;
     SQExpState   _es;

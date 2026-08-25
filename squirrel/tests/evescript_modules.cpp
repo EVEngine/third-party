@@ -45,7 +45,7 @@ SQRESULT importModule(HSQUIRRELVM vm, const SQChar*, const SQChar* specifier,
 }
 
 const SQChar* namedParameters(HSQUIRRELVM, const SQChar* callee, SQInteger index,
-                              SQUserPointer) {
+                              const SQChar**, SQUserPointer) {
     if (std::strcmp(callee, "nativeCall") != 0)
         return nullptr;
     static const char* names[] = {"first", "second"};
@@ -87,6 +87,7 @@ int main() {
     ok = ok && compileFails("function f(a, b) {}\nf(a: 1)\n");
     ok = ok && compileFails("function f(a, b) {}\nf(a: 1, a: 2)\n");
     ok = ok && compileFails("unknown_named(value: 1)\n");
+    ok = ok && compileFails("function pixelsOnly(value: pixels) {}\npixelsOnly(1m)\n");
     sq_setnamedargresolver(vm, namedParameters, nullptr);
     const char* nativeNamed = "nativeCall(second: 2, first: 1)\n";
     ok = ok && SQ_SUCCEEDED(sq_compilebuffer(
