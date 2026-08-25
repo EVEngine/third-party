@@ -250,6 +250,7 @@ SQInteger SQLexer::Lex()
             NEXT();
             if (CUR_CHAR == _SC('=')){ NEXT(); RETURN_TOKEN(TK_MINUSEQ);}
             else if  (CUR_CHAR == _SC('-')){ NEXT(); RETURN_TOKEN(TK_MINUSMINUS);}
+            else if  (CUR_CHAR == _SC('>')){ NEXT(); RETURN_TOKEN(TK_RETURN_TYPE);}
             else RETURN_TOKEN('-');
         case _SC('+'):
             NEXT();

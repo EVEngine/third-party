@@ -78,6 +78,7 @@ public:
         _lex.Init(_ss(v), rg, up,ThrowError,this);
         _sourcename = SQString::Create(_ss(v), sourcename);
         _lineinfo = lineinfo;_raiseerror = raiseerror;
+        _allowtypeannotation = true;
         _scope.outers = 0;
         _scope.stacksize = 0;
         _compilererror[0] = _SC('\0');
@@ -147,6 +148,40 @@ public:
         return ret;
     }
     bool IsEndOfStatement() { return ((_lex._prevtoken == _SC('\n')) || (_token == SQUIRREL_EOB) || (_token == _SC('}')) || (_token == _SC(';'))); }
+    void TypeRef()
+    {
+        if(_token == TK_STRING_LITERAL) {
+            Lex();
+        }
+        else {
+            Expect(TK_IDENTIFIER);
+            while(_token == _SC('.')) {
+                Lex();
+                Expect(TK_IDENTIFIER);
+            }
+            if(_token == _SC('<')) {
+                Lex();
+                TypeRef();
+                while(_token == _SC(',')) {
+                    Lex();
+                    TypeRef();
+                }
+                Expect(_SC('>'));
+            }
+        }
+        if(_token == _SC('?')) Lex();
+        while(_token == _SC('|')) {
+            Lex();
+            TypeRef();
+        }
+    }
+    void OptionalTypeAnnotation()
+    {
+        if(_token == _SC(':')) {
+            Lex();
+            TypeRef();
+        }
+    }
     void OptionalSemicolon()
     {
         if(_token == _SC(';')) { Lex(); return; }
@@ -375,6 +410,9 @@ public:
         _es.epos      = -1;
         _es.donot_get = false;
         LogicalOrExp();
+        if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
+            OptionalTypeAnnotation();
+        }
         switch(_token)  {
         case _SC('='):
         case TK_NEWSLOT:
@@ -433,7 +471,10 @@ public:
             _fs->AddInstruction(_OP_JZ, _fs->PopTarget());
             SQInteger jzpos = _fs->GetCurrentPos();
             SQInteger trg = _fs->PushTarget();
+            bool allowtypeannotation = _allowtypeannotation;
+            _allowtypeannotation = false;
             Expression();
+            _allowtypeannotation = allowtypeannotation;
             SQInteger first_exp = _fs->PopTarget();
             if(trg != first_exp) _fs->AddInstruction(_OP_MOVE, trg, first_exp);
             SQInteger endfirstexp = _fs->GetCurrentPos();
@@ -911,6 +952,9 @@ public:
         case _SC('='): case _SC('('): case TK_NEWSLOT: case TK_MODEQ: case TK_MULEQ:
         case TK_DIVEQ: case TK_MINUSEQ: case TK_PLUSEQ:
             return false;
+        case _SC(':'):
+            if(_allowtypeannotation) return false;
+            break;
         case TK_PLUSPLUS: case TK_MINUSMINUS:
             if (!IsEndOfStatement()) {
                 return false;
@@ -1007,6 +1051,7 @@ public:
                 }
             default :
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
+                OptionalTypeAnnotation();
                 Expect(_SC('=')); Expression();
             }
             if(_token == separator) Lex();//optional comma/semicolon
@@ -1046,6 +1091,7 @@ public:
 
         do {
             varname = Expect(TK_IDENTIFIER);
+            OptionalTypeAnnotation();
             if(_token == _SC('=')) {
                 Lex(); Expression();
                 SQInteger src = _fs->PopTarget();
@@ -1527,6 +1573,7 @@ public:
             }
             else {
                 paramname = Expect(TK_IDENTIFIER);
+                OptionalTypeAnnotation();
                 funcstate->AddParameter(paramname);
                 if(_token == _SC('=')) {
                     Lex();
@@ -1542,6 +1589,10 @@ public:
             }
         }
         Expect(_SC(')'));
+        if(_token == TK_RETURN_TYPE) {
+            Lex();
+            TypeRef();
+        }
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
@@ -1593,6 +1644,7 @@ private:
     SQLexer _lex;
     bool _lineinfo;
     bool _raiseerror;
+    bool _allowtypeannotation;
     SQInteger _debugline;
     SQInteger _debugop;
     SQExpState   _es;

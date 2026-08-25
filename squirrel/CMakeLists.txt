@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(squirrel VERSION 3.1 LANGUAGES C CXX)
 
+include(CTest)
+
 option(DISABLE_STATIC "Avoid building/installing static libraries.")
 option(LONG_OUTPUT_NAMES "Use longer names for binaries and libraries: squirrel3 (not sq).")
 
@@ -39,6 +41,10 @@ add_subdirectory(sqstdlib)
 if(NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Android" OR ANDROID OR IOS))
   add_subdirectory(sq)
   set(_SQ_HAVE_INTERPRETER TRUE)
+  if(BUILD_TESTING)
+    add_test(NAME evescript.types
+      COMMAND $<TARGET_FILE:sq_static> "${CMAKE_CURRENT_SOURCE_DIR}/tests/evescript_types.nut")
+  endif()
 endif()
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
