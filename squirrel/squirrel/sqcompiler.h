@@ -71,6 +71,19 @@ struct SQVM;
 #define TK_ENUM 323
 #define TK_CONST 324
 #define TK_RAWCALL 325
+#define TK_RETURN_TYPE 326
+#define TK_NULLSAFE 327
+#define TK_NULLCOALESCE 328
+#define TK_NULLCOALESCE_ASSIGN 329
+#define TK_MATCH 330
+#define TK_FATARROW 331
+#define TK_PERSIST 332
+#define TK_IMPORT 333
+#define TK_EXPORT 334
+#define TK_FROM 335
+#define TK_AS 336
+#define TK_ASYNC 337
+#define TK_AWAIT 338
 
 
 

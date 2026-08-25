@@ -99,7 +99,11 @@ enum SQOpcode
     _OP_THROW=              0x39,
     _OP_NEWSLOTA=           0x3A,
     _OP_GETBASE=            0x3B,
-    _OP_CLOSE=              0x3C
+    _OP_CLOSE=              0x3C,
+    _OP_NULLCOALESCE=       0x3D,
+    _OP_JNULL=              0x3E,
+    _OP_IMPORT=             0x3F,
+    _OP_EXPORT=             0x40
 };
 
 struct SQInstructionDesc {

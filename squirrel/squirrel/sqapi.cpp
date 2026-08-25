@@ -1258,6 +1258,25 @@ void sq_setcompilererrorhandler(HSQUIRRELVM v,SQCOMPILERERROR f)
     _ss(v)->_compilererrorhandler = f;
 }
 
+void sq_setmodulehandlers(HSQUIRRELVM v,SQMODULEDEPENDENCY dependency,SQMODULEIMPORT importer,SQUserPointer user)
+{
+    _ss(v)->_moduledependencyhandler = dependency;
+    _ss(v)->_moduleimporthandler = importer;
+    _ss(v)->_modulehandleruser = user;
+}
+
+void sq_setnamedargresolver(HSQUIRRELVM v,SQNAMEDARGRESOLVER resolver,SQUserPointer user)
+{
+    _ss(v)->_namedargresolver = resolver;
+    _ss(v)->_namedarguser = user;
+}
+
+void sq_setannotationresolver(HSQUIRRELVM v,SQANNOTATIONRESOLVER resolver,SQUserPointer user)
+{
+    _ss(v)->_annotationresolver = resolver;
+    _ss(v)->_annotationuser = user;
+}
+
 SQRESULT sq_writeclosure(HSQUIRRELVM v,SQWRITEFUNC w,SQUserPointer up)
 {
     SQObjectPtr *o = NULL;

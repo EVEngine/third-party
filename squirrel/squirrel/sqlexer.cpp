@@ -68,6 +68,14 @@ void SQLexer::Init(SQSharedState *ss, SQLEXREADFUNC rg, SQUserPointer up,Compile
     ADD_KEYWORD(__LINE__,TK___LINE__);
     ADD_KEYWORD(__FILE__,TK___FILE__);
     ADD_KEYWORD(rawcall, TK_RAWCALL);
+    ADD_KEYWORD(match, TK_MATCH);
+    ADD_KEYWORD(persist, TK_PERSIST);
+    ADD_KEYWORD(import, TK_IMPORT);
+    ADD_KEYWORD(export, TK_EXPORT);
+    ADD_KEYWORD(from, TK_FROM);
+    ADD_KEYWORD(as, TK_AS);
+    ADD_KEYWORD(async, TK_ASYNC);
+    ADD_KEYWORD(await, TK_AWAIT);
 
 
     _readf = rg;
@@ -162,8 +170,9 @@ SQInteger SQLexer::Lex()
             }
         case _SC('='):
             NEXT();
-            if (CUR_CHAR != _SC('=')){ RETURN_TOKEN('=') }
-            else { NEXT(); RETURN_TOKEN(TK_EQ); }
+            if (CUR_CHAR == _SC('=')){ NEXT(); RETURN_TOKEN(TK_EQ); }
+            if (CUR_CHAR == _SC('>')){ NEXT(); RETURN_TOKEN(TK_FATARROW); }
+            RETURN_TOKEN('=');
         case _SC('<'):
             NEXT();
             switch(CUR_CHAR) {
@@ -215,8 +224,17 @@ SQInteger SQLexer::Lex()
             }
             Error(_SC("error parsing the string"));
             }
+        case _SC('?'):
+            NEXT();
+            if(CUR_CHAR == _SC('.')) { NEXT(); RETURN_TOKEN(TK_NULLSAFE); }
+            if(CUR_CHAR == _SC('?')) {
+                NEXT();
+                if(CUR_CHAR == _SC('=')) { NEXT(); RETURN_TOKEN(TK_NULLCOALESCE_ASSIGN); }
+                RETURN_TOKEN(TK_NULLCOALESCE);
+            }
+            RETURN_TOKEN('?');
         case _SC('{'): case _SC('}'): case _SC('('): case _SC(')'): case _SC('['): case _SC(']'):
-        case _SC(';'): case _SC(','): case _SC('?'): case _SC('^'): case _SC('~'):
+        case _SC(';'): case _SC(','): case _SC('^'): case _SC('~'):
             {SQInteger ret = CUR_CHAR;
             NEXT(); RETURN_TOKEN(ret); }
         case _SC('.'):
@@ -250,6 +268,7 @@ SQInteger SQLexer::Lex()
             NEXT();
             if (CUR_CHAR == _SC('=')){ NEXT(); RETURN_TOKEN(TK_MINUSEQ);}
             else if  (CUR_CHAR == _SC('-')){ NEXT(); RETURN_TOKEN(TK_MINUSMINUS);}
+            else if  (CUR_CHAR == _SC('>')){ NEXT(); RETURN_TOKEN(TK_RETURN_TYPE);}
             else RETURN_TOKEN('-');
         case _SC('+'):
             NEXT();

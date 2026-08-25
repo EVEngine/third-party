@@ -990,6 +990,45 @@ exception_restore:
                     ci->_ip += (sarg1);
                 }
                 continue;
+            case _OP_NULLCOALESCE:
+                if(sq_type(STK(arg2)) != OT_NULL) {
+                    TARGET = STK(arg2);
+                    ci->_ip += (sarg1);
+                }
+                continue;
+            case _OP_JNULL:
+                if(sq_type(STK(arg0)) == OT_NULL) ci->_ip += (sarg1);
+                continue;
+            case _OP_IMPORT: {
+                if(!_ss(this)->_moduleimporthandler) {
+                    Raise_Error(_SC("script module importer is not installed"));
+                    SQ_THROW();
+                }
+                SQFunctionProto *function = _closure(ci->_closure)->_function;
+                SQObjectPtr &specifier = ci->_literals[arg1];
+                HSQOBJECT exports;
+                exports._type = OT_NULL;
+                exports._unVal.raw = 0;
+                if(SQ_FAILED(_ss(this)->_moduleimporthandler(this, _stringval(function->_sourcename),
+                    _stringval(specifier), _ss(this)->_modulehandleruser, &exports))) {
+                    SQ_THROW();
+                }
+                TARGET = exports;
+                }
+                continue;
+            case _OP_EXPORT: {
+                SQWeakRef *rootref = _closure(ci->_closure)->_root;
+                SQObjectPtr root = sq_type(rootref->_obj) == OT_NULL ? _roottable : rootref->_obj;
+                SQObjectPtr exports;
+                SQObjectPtr exportskey = SQString::Create(_ss(this), _SC("__exports"));
+                if(!Get(root, exportskey, exports, GET_FLAG_RAW, DONT_FALL_BACK) ||
+                    sq_type(exports) != OT_TABLE) {
+                    Raise_Error(_SC("export used outside a script module"));
+                    SQ_THROW();
+                }
+                _GUARD(NewSlot(exports, ci->_literals[arg1], STK(arg2), false));
+                }
+                continue;
             case _OP_NEG: _GUARD(NEG_OP(TARGET,STK(arg1))); continue;
             case _OP_NOT: TARGET = IsFalse(STK(arg1)); continue;
             case _OP_BWNOT:

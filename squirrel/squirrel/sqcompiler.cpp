@@ -14,6 +14,10 @@
 #include "sqvm.h"
 #include "sqtable.h"
 
+#include <map>
+#include <string>
+#include <vector>
+
 #define EXPR   1
 #define OBJECT 2
 #define BASE   3
@@ -31,6 +35,29 @@ struct SQExpState {
 struct SQScope {
     SQInteger outers;
     SQInteger stacksize;
+};
+
+enum SQScriptUnit {
+    UNIT_NONE,
+    UNIT_SECONDS,
+    UNIT_MILLISECONDS,
+    UNIT_RADIANS,
+    UNIT_DEGREES,
+    UNIT_PIXELS,
+    UNIT_METERS
+};
+
+struct SQFunctionParameter {
+    std::basic_string<SQChar> name;
+    std::basic_string<SQChar> type;
+    bool nullable = true;
+    SQScriptUnit unit = UNIT_NONE;
+    std::vector<std::basic_string<SQChar> > choices;
+};
+
+struct SQFunctionSignature {
+    std::basic_string<SQChar> name;
+    std::vector<SQFunctionParameter> parameters;
 };
 
 #define BEGIN_SCOPE() SQScope __oldscope__ = _scope; \
@@ -78,6 +105,11 @@ public:
         _lex.Init(_ss(v), rg, up,ThrowError,this);
         _sourcename = SQString::Create(_ss(v), sourcename);
         _lineinfo = lineinfo;_raiseerror = raiseerror;
+        _allowtypeannotation = true;
+        _asyncdepth = 0;
+        _expectedunit = UNIT_NONE;
+        _expectedtype.clear();
+        _expectednullable = true;
         _scope.outers = 0;
         _scope.stacksize = 0;
         _compilererror[0] = _SC('\0');
@@ -99,7 +131,7 @@ public:
     {
 
         if(_token != tok) {
-            if(_token == TK_CONSTRUCTOR && tok == TK_IDENTIFIER) {
+            if((_token == TK_CONSTRUCTOR || _token == TK_PERSIST) && tok == TK_IDENTIFIER) {
                 //do nothing
             }
             else {
@@ -131,7 +163,8 @@ public:
         switch(tok)
         {
         case TK_IDENTIFIER:
-            ret = _fs->CreateString(_lex._svalue);
+            ret = _token == TK_PERSIST ? _fs->CreateString(_SC("persist"), 7)
+                                       : _fs->CreateString(_lex._svalue);
             break;
         case TK_STRING_LITERAL:
             ret = _fs->CreateString(_lex._svalue,_lex._longstr.size()-1);
@@ -147,6 +180,68 @@ public:
         return ret;
     }
     bool IsEndOfStatement() { return ((_lex._prevtoken == _SC('\n')) || (_token == SQUIRREL_EOB) || (_token == _SC('}')) || (_token == _SC(';'))); }
+    SQScriptUnit UnitFromName(const SQChar *name) const
+    {
+        if(scstrcmp(name, _SC("seconds")) == 0) return UNIT_SECONDS;
+        if(scstrcmp(name, _SC("milliseconds")) == 0) return UNIT_MILLISECONDS;
+        if(scstrcmp(name, _SC("radians")) == 0) return UNIT_RADIANS;
+        if(scstrcmp(name, _SC("degrees")) == 0) return UNIT_DEGREES;
+        if(scstrcmp(name, _SC("pixels")) == 0) return UNIT_PIXELS;
+        if(scstrcmp(name, _SC("meters")) == 0) return UNIT_METERS;
+        return UNIT_NONE;
+    }
+    SQScriptUnit TypeRef(std::vector<std::basic_string<SQChar> > *choices = NULL,
+                         std::basic_string<SQChar> *type = NULL, bool *nullable = NULL)
+    {
+        SQScriptUnit unit = UNIT_NONE;
+        if(_token == TK_STRING_LITERAL) {
+            if(type != NULL) *type = _SC("string");
+            if(choices != NULL)
+                choices->push_back(std::basic_string<SQChar>(_lex._svalue,
+                                                             _lex._longstr.size() - 1));
+            Lex();
+        }
+        else {
+            if(_token == TK_IDENTIFIER) {
+                unit = UnitFromName(_lex._svalue);
+                if(type != NULL) *type = _lex._svalue;
+            }
+            Expect(TK_IDENTIFIER);
+            while(_token == _SC('.')) {
+                Lex();
+                Expect(TK_IDENTIFIER);
+            }
+            if(_token == _SC('<')) {
+                Lex();
+                TypeRef();
+                while(_token == _SC(',')) {
+                    Lex();
+                    TypeRef();
+                }
+                Expect(_SC('>'));
+            }
+        }
+        if(nullable != NULL) *nullable = false;
+        if(_token == _SC('?')) {
+            if(nullable != NULL) *nullable = true;
+            Lex();
+        }
+        while(_token == _SC('|')) {
+            Lex();
+            TypeRef(choices);
+        }
+        return unit;
+    }
+    SQScriptUnit OptionalTypeAnnotation(
+        std::vector<std::basic_string<SQChar> > *choices = NULL,
+        std::basic_string<SQChar> *type = NULL, bool *nullable = NULL)
+    {
+        if(_token == _SC(':')) {
+            Lex();
+            return TypeRef(choices, type, nullable);
+        }
+        return UNIT_NONE;
+    }
     void OptionalSemicolon()
     {
         if(_token == _SC(';')) { Lex(); return; }
@@ -217,6 +312,10 @@ public:
         case TK_FOR:        ForStatement();         break;
         case TK_FOREACH:    ForEachStatement();     break;
         case TK_SWITCH: SwitchStatement();      break;
+        case TK_MATCH:   MatchStatement();       break;
+        case TK_PERSIST: PersistStatement();     break;
+        case TK_IMPORT:  ImportStatement();      break;
+        case TK_EXPORT:  ExportStatement();      break;
         case TK_LOCAL:      LocalDeclStatement();   break;
         case TK_RETURN:
         case TK_YIELD: {
@@ -266,6 +365,9 @@ public:
             break;
         case TK_FUNCTION:
             FunctionStatement();
+            break;
+        case TK_ASYNC:
+            AsyncFunctionStatement();
             break;
         case TK_CLASS:
             ClassStatement();
@@ -371,10 +473,17 @@ public:
     void Expression()
     {
          SQExpState es = _es;
+        SQScriptUnit assignmentUnit = UNIT_NONE;
+        std::vector<std::basic_string<SQChar> > assignmentChoices;
+        std::basic_string<SQChar> assignmentType;
+        bool assignmentNullable = true;
         _es.etype     = EXPR;
         _es.epos      = -1;
         _es.donot_get = false;
-        LogicalOrExp();
+        NullCoalesceExp();
+        if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
+            assignmentUnit = OptionalTypeAnnotation(&assignmentChoices, &assignmentType, &assignmentNullable);
+        }
         switch(_token)  {
         case _SC('='):
         case TK_NEWSLOT:
@@ -388,7 +497,20 @@ public:
             SQInteger pos = _es.epos;
             if(ds == EXPR) Error(_SC("can't assign expression"));
             else if(ds == BASE) Error(_SC("'base' cannot be modified"));
-            Lex(); Expression();
+            Lex();
+            SQScriptUnit previousUnit = _expectedunit;
+            std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+            std::basic_string<SQChar> previousType = _expectedtype;
+            bool previousNullable = _expectednullable;
+            if(assignmentUnit != UNIT_NONE) _expectedunit = assignmentUnit;
+            if(!assignmentChoices.empty()) _expectedchoices = assignmentChoices;
+            _expectedtype = assignmentType;
+            _expectednullable = assignmentNullable;
+            Expression();
+            _expectedunit = previousUnit;
+            _expectedchoices = previousChoices;
+            _expectedtype = previousType;
+            _expectednullable = previousNullable;
 
             switch(op){
             case TK_NEWSLOT:
@@ -428,12 +550,58 @@ public:
             }
             }
             break;
+        case TK_NULLCOALESCE_ASSIGN: {
+            SQInteger ds = _es.etype;
+            SQInteger pos = _es.epos;
+            if(ds == EXPR || ds == BASE) Error(_SC("invalid target for '??='"));
+
+            if(ds == LOCAL) {
+                SQInteger target = _fs->TopTarget();
+                _fs->AddInstruction(_OP_NULLCOALESCE, target, 0, target, 0);
+                SQInteger jpos = _fs->GetCurrentPos();
+                Lex(); Expression();
+                SQInteger src = _fs->PopTarget();
+                if(target != src) _fs->AddInstruction(_OP_MOVE, target, src);
+                _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            }
+            else if(ds == OUTER) {
+                SQInteger target = _fs->PushTarget();
+                _fs->AddInstruction(_OP_GETOUTER, target, pos);
+                _fs->AddInstruction(_OP_NULLCOALESCE, target, 0, target, 0);
+                SQInteger jpos = _fs->GetCurrentPos();
+                Lex(); Expression();
+                SQInteger src = _fs->PopTarget();
+                _fs->AddInstruction(_OP_SETOUTER, target, pos, src);
+                _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            }
+            else {
+                SQInteger key = _fs->TopTarget();
+                SQInteger object = key - 1;
+                SQInteger existing = _fs->PushTarget();
+                _fs->AddInstruction(_OP_GET, existing, object, key);
+                _fs->AddInstruction(_OP_JNULL, existing, 0);
+                SQInteger nullpos = _fs->GetCurrentPos();
+                _fs->AddInstruction(_OP_MOVE, object, existing);
+                _fs->AddInstruction(_OP_JMP, 0, 0);
+                SQInteger endpos = _fs->GetCurrentPos();
+                _fs->PopTarget();
+                Lex(); Expression();
+                EmitDerefOp(_OP_SET);
+                _fs->SetInstructionParam(nullpos, 1, endpos - nullpos);
+                _fs->SetInstructionParam(endpos, 1, _fs->GetCurrentPos() - endpos);
+            }
+            _es.etype = EXPR;
+            }
+            break;
         case _SC('?'): {
             Lex();
             _fs->AddInstruction(_OP_JZ, _fs->PopTarget());
             SQInteger jzpos = _fs->GetCurrentPos();
             SQInteger trg = _fs->PushTarget();
+            bool allowtypeannotation = _allowtypeannotation;
+            _allowtypeannotation = false;
             Expression();
+            _allowtypeannotation = allowtypeannotation;
             SQInteger first_exp = _fs->PopTarget();
             if(trg != first_exp) _fs->AddInstruction(_OP_MOVE, trg, first_exp);
             SQInteger endfirstexp = _fs->GetCurrentPos();
@@ -486,6 +654,24 @@ public:
             _es.etype = EXPR;
             break;
         }else return;
+    }
+    void NullCoalesceExp()
+    {
+        LogicalOrExp();
+        if(_token == TK_NULLCOALESCE) {
+            SQInteger first_exp = _fs->PopTarget();
+            SQInteger trg = _fs->PushTarget();
+            _fs->AddInstruction(_OP_NULLCOALESCE, trg, 0, first_exp, 0);
+            SQInteger jpos = _fs->GetCurrentPos();
+            if(trg != first_exp) _fs->AddInstruction(_OP_MOVE, trg, first_exp);
+            Lex(); INVOKE_EXP(&SQCompiler::NullCoalesceExp);
+            _fs->SnoozeOpt();
+            SQInteger second_exp = _fs->PopTarget();
+            if(trg != second_exp) _fs->AddInstruction(_OP_MOVE, trg, second_exp);
+            _fs->SnoozeOpt();
+            _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            _es.etype = EXPR;
+        }
     }
     void LogicalAndExp()
     {
@@ -613,14 +799,26 @@ public:
     //if 'pos' != -1 the previous variable is a local variable
     void PrefixedExpr()
     {
+        SQUnsignedInteger nullsafeBase = _nullsafejumps.size();
+        _activecallname.Null();
         SQInteger pos = Factor();
         for(;;) {
             switch(_token) {
+            case TK_NULLSAFE: {
+                SQInteger receiver = _fs->TopTarget();
+                _fs->AddInstruction(_OP_JNULL, receiver, 0);
+                _nullsafejumps.push_back(_fs->GetCurrentPos());
+                _token = _SC('.');
+                }
+                break;
             case _SC('.'):
                 pos = -1;
                 Lex();
-
-                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
+                {
+                SQObject member = Expect(TK_IDENTIFIER);
+                _activecallname = member;
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(member));
+                }
                 if(_es.etype==BASE) {
                     Emit2ArgsOP(_OP_GET);
                     pos = _fs->TopTarget();
@@ -707,18 +905,95 @@ public:
                 Lex();
                 FunctionCallArgs();
                 break;
-            default: return;
+            default:
+                while(_nullsafejumps.size() > nullsafeBase) {
+                    SQInteger pos = _nullsafejumps.back();
+                    _nullsafejumps.pop_back();
+                    _fs->SetInstructionParam(pos, 1, _fs->GetCurrentPos() - pos);
+                }
+                return;
             }
         }
     }
+    void NumericLiteral(bool negative)
+    {
+        const bool wasInteger = _token == TK_INTEGER;
+        const SQInteger integerValue = negative ? -_lex._nvalue : _lex._nvalue;
+        SQFloat value = wasInteger ? static_cast<SQFloat>(_lex._nvalue) : _lex._fvalue;
+        if(negative) value = -value;
+        Lex();
+        SQScriptUnit sourceUnit = UNIT_NONE;
+        if(_token == TK_IDENTIFIER) {
+            if(scstrcmp(_lex._svalue, _SC("ms")) == 0) sourceUnit = UNIT_MILLISECONDS;
+            else if(scstrcmp(_lex._svalue, _SC("deg")) == 0) sourceUnit = UNIT_DEGREES;
+            else if(scstrcmp(_lex._svalue, _SC("px")) == 0) sourceUnit = UNIT_PIXELS;
+            else if(scstrcmp(_lex._svalue, _SC("m")) == 0) sourceUnit = UNIT_METERS;
+            if(sourceUnit != UNIT_NONE) Lex();
+        }
+        if(sourceUnit == UNIT_NONE) {
+            if(wasInteger) EmitLoadConstInt(integerValue, -1);
+            else EmitLoadConstFloat(value, -1);
+            return;
+        }
+        if(sourceUnit != UNIT_NONE && _expectedunit != UNIT_NONE) {
+            if(sourceUnit == UNIT_MILLISECONDS && _expectedunit == UNIT_SECONDS)
+                value *= static_cast<SQFloat>(0.001);
+            else if(sourceUnit == UNIT_DEGREES && _expectedunit == UNIT_RADIANS)
+                value *= static_cast<SQFloat>(3.14159265358979323846 / 180.0);
+            else if(!((sourceUnit == UNIT_MILLISECONDS && _expectedunit == UNIT_MILLISECONDS) ||
+                      (sourceUnit == UNIT_DEGREES && _expectedunit == UNIT_DEGREES) ||
+                      (sourceUnit == UNIT_PIXELS && _expectedunit == UNIT_PIXELS) ||
+                      (sourceUnit == UNIT_METERS && _expectedunit == UNIT_METERS)))
+                Error(_SC("incompatible units"));
+        }
+        EmitLoadConstFloat(value, -1);
+    }
     SQInteger Factor()
     {
+        if(!_expectedtype.empty()) {
+            const bool wantsString = _expectedtype == _SC("string");
+            const bool wantsBool = _expectedtype == _SC("bool");
+            const bool wantsInt = _expectedtype == _SC("int");
+            const bool wantsFloat = _expectedtype == _SC("float");
+            if(_token == TK_NULL && !_expectednullable)
+                Error(_SC("value is not assignable to the declared type"));
+            if((wantsString && (_token == TK_INTEGER || _token == TK_FLOAT || _token == TK_TRUE || _token == TK_FALSE)) ||
+               (wantsBool && (_token == TK_INTEGER || _token == TK_FLOAT || _token == TK_STRING_LITERAL)) ||
+               (wantsInt && (_token == TK_FLOAT || _token == TK_STRING_LITERAL || _token == TK_TRUE || _token == TK_FALSE)) ||
+               (wantsFloat && (_token == TK_STRING_LITERAL || _token == TK_TRUE || _token == TK_FALSE)))
+                Error(_SC("value is not assignable to the declared type"));
+        }
         //_es.etype = EXPR;
         switch(_token)
         {
         case TK_STRING_LITERAL:
+            if(!_expectedchoices.empty()) {
+                bool allowed = false;
+                for(SQUnsignedInteger i = 0; i < _expectedchoices.size(); ++i) {
+                    if(scstrcmp(_expectedchoices[i].c_str(), _lex._svalue) == 0) {
+                        allowed = true;
+                        break;
+                    }
+                }
+                if(!allowed) Error(_SC("string is outside the allowed choices"));
+            }
             _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(_fs->CreateString(_lex._svalue,_lex._longstr.size()-1)));
             Lex();
+            break;
+        case TK_AWAIT:{
+            if(_asyncdepth == 0) Error(_SC("await is only allowed inside async function"));
+            Lex();
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(),
+                                _fs->GetConstant(_fs->CreateString(_SC("suspend"))));
+            Emit2ArgsOP(_OP_GET);
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            PrefixedExpr();
+            _fs->PopTarget();
+            SQInteger stackbase = _fs->PopTarget();
+            SQInteger closure = _fs->PopTarget();
+            _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, 2);
+            }
             break;
         case TK_BASE:
             Lex();
@@ -729,14 +1004,19 @@ public:
             break;
         case TK_IDENTIFIER:
         case TK_CONSTRUCTOR:
+        case TK_PERSIST:
         case TK_THIS:{
                 SQObject id;
                 SQObject constant;
 
                 switch(_token) {
-                    case TK_IDENTIFIER:  id = _fs->CreateString(_lex._svalue);       break;
+                    case TK_IDENTIFIER:
+                        id = _fs->CreateString(_lex._svalue);
+                        _activecallname = id;
+                        break;
                     case TK_THIS:        id = _fs->CreateString(_SC("this"),4);        break;
                     case TK_CONSTRUCTOR: id = _fs->CreateString(_SC("constructor"),11); break;
+                    case TK_PERSIST:     id = _fs->CreateString(_SC("persist"),7);     break;
                 }
 
                 SQInteger pos = -1;
@@ -816,8 +1096,8 @@ public:
             _fs->AddInstruction(_OP_LOADNULLS, _fs->PushTarget(),1);
             Lex();
             break;
-        case TK_INTEGER: EmitLoadConstInt(_lex._nvalue,-1); Lex();  break;
-        case TK_FLOAT: EmitLoadConstFloat(_lex._fvalue,-1); Lex(); break;
+        case TK_INTEGER:
+        case TK_FLOAT: NumericLiteral(false); break;
         case TK_TRUE: case TK_FALSE:
             _fs->AddInstruction(_OP_LOADBOOL, _fs->PushTarget(),_token == TK_TRUE?1:0);
             Lex();
@@ -848,8 +1128,8 @@ public:
         case _SC('-'):
             Lex();
             switch(_token) {
-            case TK_INTEGER: EmitLoadConstInt(-_lex._nvalue,-1); Lex(); break;
-            case TK_FLOAT: EmitLoadConstFloat(-_lex._fvalue,-1); Lex(); break;
+            case TK_INTEGER:
+            case TK_FLOAT: NumericLiteral(true); break;
             default: UnaryOP(_OP_NEG);
             }
             break;
@@ -909,8 +1189,11 @@ public:
     {
         switch(_token) {
         case _SC('='): case _SC('('): case TK_NEWSLOT: case TK_MODEQ: case TK_MULEQ:
-        case TK_DIVEQ: case TK_MINUSEQ: case TK_PLUSEQ:
+        case TK_DIVEQ: case TK_MINUSEQ: case TK_PLUSEQ: case TK_NULLCOALESCE_ASSIGN:
             return false;
+        case _SC(':'):
+            if(_allowtypeannotation) return false;
+            break;
         case TK_PLUSPLUS: case TK_MINUSMINUS:
             if (!IsEndOfStatement()) {
                 return false;
@@ -921,10 +1204,50 @@ public:
     }
     void FunctionCallArgs(bool rawcall = false)
     {
+        const SQObjectPtr callName = _activecallname;
+        const SQFunctionSignature *callSignature = FindSignature(callName);
         SQInteger nargs = 1;//this
+        bool hasNamedArgs = false;
+        SQObjectPtrVec argumentNames;
+        sqvector<SQInteger> argumentTargets;
          while(_token != _SC(')')) {
+             SQObjectPtr argumentName;
+             if(_token == TK_IDENTIFIER && _lex._currdata == _SC(':')) {
+                 argumentName = Expect(TK_IDENTIFIER);
+                 Expect(_SC(':'));
+                 hasNamedArgs = true;
+             }
+             SQInteger parameterIndex = static_cast<SQInteger>(argumentNames.size());
+             if(!sq_isnull(argumentName) && callSignature != NULL) {
+                 parameterIndex = -1;
+                 for(SQUnsignedInteger p = 0; p < callSignature->parameters.size(); ++p) {
+                     if(scstrcmp(_stringval(argumentName),
+                                 callSignature->parameters[p].name.c_str()) == 0) {
+                         parameterIndex = static_cast<SQInteger>(p);
+                         break;
+                     }
+                 }
+             }
+             SQScriptUnit previousUnit = _expectedunit;
+             std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+             std::basic_string<SQChar> previousType = _expectedtype;
+             bool previousNullable = _expectednullable;
+             if(callSignature != NULL && parameterIndex >= 0 &&
+                static_cast<SQUnsignedInteger>(parameterIndex) < callSignature->parameters.size()) {
+                 _expectedunit = callSignature->parameters[parameterIndex].unit;
+                 _expectedtype = callSignature->parameters[parameterIndex].type;
+                 _expectednullable = callSignature->parameters[parameterIndex].nullable;
+                 if(!callSignature->parameters[parameterIndex].choices.empty())
+                     _expectedchoices = callSignature->parameters[parameterIndex].choices;
+             }
              Expression();
+             _expectedunit = previousUnit;
+             _expectedchoices = previousChoices;
+             _expectedtype = previousType;
+             _expectednullable = previousNullable;
              MoveIfCurrentTargetIsLocal();
+             argumentNames.push_back(argumentName);
+             argumentTargets.push_back(_fs->TopTarget());
              nargs++;
              if(_token == _SC(',')){
                  Lex();
@@ -932,6 +1255,60 @@ public:
              }
          }
          Lex();
+         if(hasNamedArgs) {
+             if(rawcall) Error(_SC("rawcall does not support named arguments"));
+             const SQFunctionSignature *signature = callSignature;
+             if(signature == NULL)
+                 Error(_SC("named arguments require a known function or Binding Contract"));
+             if(signature->parameters.size() != argumentNames.size())
+                 Error(_SC("missing named argument"));
+
+             sqvector<SQInteger> orderedTargets;
+             sqvector<SQBool> used;
+             used.resize(argumentNames.size(), SQFalse);
+             SQUnsignedInteger positional = 0;
+             for(SQUnsignedInteger p = 0; p < signature->parameters.size(); ++p) {
+                 SQInteger selected = -1;
+                 while(positional < argumentNames.size() && sq_isnull(argumentNames[positional])) {
+                     selected = static_cast<SQInteger>(positional++);
+                     break;
+                 }
+                 if(selected < 0) {
+                     for(SQUnsignedInteger a = 0; a < argumentNames.size(); ++a) {
+                         if(used[a] || sq_isnull(argumentNames[a])) continue;
+                         if(scstrcmp(_stringval(argumentNames[a]),
+                                     signature->parameters[p].name.c_str()) == 0) {
+                             selected = static_cast<SQInteger>(a);
+                             break;
+                         }
+                     }
+                 }
+                 if(selected < 0) Error(_SC("missing named argument"));
+                 if(used[selected]) Error(_SC("duplicate named argument"));
+                 used[selected] = SQTrue;
+                 orderedTargets.push_back(argumentTargets[selected]);
+             }
+             for(SQUnsignedInteger a = 0; a < argumentNames.size(); ++a) {
+                 if(!used[a]) Error(_SC("unknown or duplicate named argument"));
+             }
+
+             sqvector<SQInteger> temporaryTargets;
+             for(SQUnsignedInteger i = 0; i < orderedTargets.size(); ++i) {
+                 const SQInteger target = _fs->PushTarget();
+                 _fs->AddInstruction(_OP_MOVE, target, orderedTargets[i]);
+                 temporaryTargets.push_back(target);
+             }
+             for(SQUnsignedInteger i = 0; i < temporaryTargets.size(); ++i)
+                 _fs->AddInstruction(_OP_MOVE, argumentTargets[i], temporaryTargets[i]);
+             for(SQUnsignedInteger i = 0; i < temporaryTargets.size(); ++i)
+                 _fs->PopTarget();
+             for(SQUnsignedInteger i = 0; i < argumentTargets.size(); ++i)
+                 _fs->PopTarget();
+             SQInteger stackbase = _fs->PopTarget();
+             SQInteger closure = _fs->PopTarget();
+             _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, nargs);
+             return;
+         }
          if (rawcall) {
              if (nargs < 3) Error(_SC("rawcall requires at least 2 parameters (callee and this)"));
              nargs -= 2; //removes callee and this from count
@@ -965,6 +1342,126 @@ public:
 			 Lex();
 		 }
     }
+
+    const SQFunctionSignature *FindSignature(const SQObjectPtr &name)
+    {
+        if(sq_isnull(name) || sq_type(name) != OT_STRING) return NULL;
+        for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
+            if(scstrcmp(_signatures[i].name.c_str(), _stringval(name)) == 0)
+                return &_signatures[i];
+        }
+        if(_ss(_vm)->_namedargresolver) {
+            SQFunctionSignature signature;
+            signature.name = _stringval(name);
+            for(SQInteger index = 0;; ++index) {
+                const SQChar *unitName = NULL;
+                const SQChar *choiceNames = NULL;
+                const SQChar *typeName = NULL;
+                SQBool nullable = SQTrue;
+                const SQChar *parameter = _ss(_vm)->_namedargresolver(
+                    _vm, signature.name.c_str(), index, &typeName, &nullable, &unitName, &choiceNames,
+                    _ss(_vm)->_namedarguser);
+                if(parameter == NULL) break;
+                SQFunctionParameter resolved;
+                resolved.name = parameter;
+                resolved.type = typeName == NULL ? _SC("") : typeName;
+                resolved.nullable = nullable != SQFalse;
+                resolved.unit = unitName == NULL ? UNIT_NONE : UnitFromName(unitName);
+                if(choiceNames != NULL) {
+                    const SQChar *begin = choiceNames;
+                    for(const SQChar *cursor = choiceNames;; ++cursor) {
+                        if(*cursor == _SC(',') || *cursor == _SC('\0')) {
+                            resolved.choices.push_back(std::basic_string<SQChar>(begin, cursor));
+                            if(*cursor == _SC('\0')) break;
+                            begin = cursor + 1;
+                        }
+                    }
+                }
+                signature.parameters.push_back(resolved);
+            }
+            if(!signature.parameters.empty()) {
+                _signatures.push_back(signature);
+                return &_signatures.back();
+            }
+        }
+        return NULL;
+    }
+
+    void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters,
+                           const sqvector<SQScriptUnit> &units,
+                           const std::vector<std::vector<std::basic_string<SQChar> > > &choices,
+                           const std::vector<std::basic_string<SQChar> > &types,
+                           const std::vector<bool> &nullable)
+    {
+        if(sq_type(name) != OT_STRING) return;
+        for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
+            if(scstrcmp(_signatures[i].name.c_str(), _stringval(name)) == 0) {
+                _signatures[i].parameters.clear();
+                for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
+                    SQFunctionParameter parameter;
+                    parameter.name = _stringval(parameters[p]);
+                    parameter.type = types[p];
+                    parameter.nullable = nullable[p];
+                    parameter.unit = units[p];
+                    parameter.choices = choices[p];
+                    _signatures[i].parameters.push_back(parameter);
+                }
+                return;
+            }
+        }
+        SQFunctionSignature signature;
+        signature.name = _stringval(name);
+        for(SQUnsignedInteger p = 0; p < parameters.size(); ++p) {
+            SQFunctionParameter parameter;
+            parameter.name = _stringval(parameters[p]);
+            parameter.type = types[p];
+            parameter.nullable = nullable[p];
+            parameter.unit = units[p];
+            parameter.choices = choices[p];
+            signature.parameters.push_back(parameter);
+        }
+        _signatures.push_back(signature);
+    }
+    void ParseAnnotations()
+    {
+        _fs->AddInstruction(_OP_NEWOBJ, _fs->PushTarget(), 0, NOT_TABLE);
+        while(_token == _SC('@')) {
+            Lex();
+            SQObject annotation = Expect(TK_IDENTIFIER);
+            const bool builtin = scstrcmp(_stringval(annotation), _SC("editor")) == 0 ||
+                                 scstrcmp(_stringval(annotation), _SC("unit")) == 0;
+            if(!builtin && (!_ss(_vm)->_annotationresolver ||
+               !_ss(_vm)->_annotationresolver(_vm, _stringval(annotation), _ss(_vm)->_annotationuser)))
+                Error(_SC("unknown annotation '%s'"), _stringval(annotation));
+            Expect(_SC('('));
+            bool first = true;
+            while(_token != _SC(')')) {
+                SQObject key;
+                if(first) {
+                    key = annotation;
+                    first = false;
+                }
+                else {
+                    key = Expect(TK_IDENTIFIER);
+                    Expect(_SC(':'));
+                }
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(key));
+                Expression();
+                SQInteger value = _fs->PopTarget();
+                SQInteger keypos = _fs->PopTarget();
+                SQInteger attrs = _fs->TopTarget();
+                _fs->AddInstruction(_OP_NEWSLOT, 0xFF, attrs, keypos, value);
+                if(_token == _SC(',')) {
+                    Lex();
+                    if(_token == _SC(')')) Error(_SC("annotation argument expected"));
+                }
+                else if(_token != _SC(')')) {
+                    Error(_SC("expected ')' or ',' in annotation"));
+                }
+            }
+            Expect(_SC(')'));
+        }
+    }
     void ParseTableOrClass(SQInteger separator,SQInteger terminator)
     {
         SQInteger tpos = _fs->GetCurrentPos(),nkeys = 0;
@@ -973,7 +1470,11 @@ public:
             bool isstatic = false;
             //check if is an attribute
             if(separator == ';') {
-                if(_token == TK_ATTR_OPEN) {
+                if(_token == _SC('@')) {
+                    ParseAnnotations();
+                    hasattrs = true;
+                }
+                else if(_token == TK_ATTR_OPEN) {
                     _fs->AddInstruction(_OP_NEWOBJ, _fs->PushTarget(),0,NOT_TABLE); Lex();
                     ParseTableOrClass(',',TK_ATTR_CLOSE);
                     hasattrs = true;
@@ -993,8 +1494,19 @@ public:
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
                 CreateFunction(id);
                 _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
-                                }
+                }
                                 break;
+            case TK_ASYNC:{
+                Lex();
+                if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+                Lex();
+                SQObject id = Expect(TK_IDENTIFIER);
+                Expect(_SC('('));
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
+                CreateFunction(id, false, true);
+                _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
+                }
+                break;
             case _SC('['):
                 Lex(); CommaExpr(); Expect(_SC(']'));
                 Expect(_SC('=')); Expression();
@@ -1007,7 +1519,27 @@ public:
                 }
             default :
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
-                Expect(_SC('=')); Expression();
+                {
+                std::vector<std::basic_string<SQChar> > declaredChoices;
+                std::basic_string<SQChar> declaredType;
+                bool declaredNullable = true;
+                SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices, &declaredType,
+                                                                    &declaredNullable);
+                Expect(_SC('='));
+                SQScriptUnit previousUnit = _expectedunit;
+                std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+                std::basic_string<SQChar> previousType = _expectedtype;
+                bool previousNullable = _expectednullable;
+                if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
+                _expectedtype = declaredType;
+                _expectednullable = declaredNullable;
+                Expression();
+                _expectedunit = previousUnit;
+                _expectedchoices = previousChoices;
+                _expectedtype = previousType;
+                _expectednullable = previousNullable;
+                }
             }
             if(_token == separator) Lex();//optional comma/semicolon
             nkeys++;
@@ -1046,8 +1578,30 @@ public:
 
         do {
             varname = Expect(TK_IDENTIFIER);
+            std::vector<std::basic_string<SQChar> > declaredChoices;
+            std::basic_string<SQChar> declaredType;
+            bool declaredNullable = true;
+            SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices, &declaredType,
+                                                                &declaredNullable);
+            if(!declaredChoices.empty())
+                _choiceSymbols[_stringval(varname)] = declaredChoices;
+            else
+                _choiceSymbols.erase(_stringval(varname));
             if(_token == _SC('=')) {
-                Lex(); Expression();
+                Lex();
+                SQScriptUnit previousUnit = _expectedunit;
+                std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
+                std::basic_string<SQChar> previousType = _expectedtype;
+                bool previousNullable = _expectednullable;
+                if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
+                _expectedtype = declaredType;
+                _expectednullable = declaredNullable;
+                Expression();
+                _expectedunit = previousUnit;
+                _expectedchoices = previousChoices;
+                _expectedtype = previousType;
+                _expectednullable = previousNullable;
                 SQInteger src = _fs->PopTarget();
                 SQInteger dest = _fs->PushTarget();
                 if(dest != src) _fs->AddInstruction(_OP_MOVE, dest, src);
@@ -1296,10 +1850,233 @@ public:
         if(__nbreaks__ > 0)ResolveBreaks(_fs, __nbreaks__);
         _fs->_breaktargets.pop_back();
     }
-    void FunctionStatement()
+    void MatchStatement()
+    {
+        Lex();
+        std::vector<std::basic_string<SQChar> > subjectChoices;
+        if(_token == TK_IDENTIFIER) {
+            const std::basic_string<SQChar> subjectName(_lex._svalue);
+            const auto found = _choiceSymbols.find(subjectName);
+            if(found != _choiceSymbols.end()) subjectChoices = found->second;
+        }
+        Expression();
+        Expect(_SC('{'));
+        SQInteger subject = _fs->TopTarget();
+        SQInteger nextbranch = -1;
+        sqvector<SQInteger> endjumps;
+        bool sawelse = false;
+        std::vector<std::basic_string<SQChar> > coveredChoices;
+
+        while(_token != _SC('}')) {
+            if(nextbranch != -1) {
+                _fs->SetInstructionParam(nextbranch, 1, _fs->GetCurrentPos() - nextbranch);
+                nextbranch = -1;
+            }
+
+            if(_token == TK_ELSE) {
+                if(sawelse) Error(_SC("duplicate else branch in match"));
+                sawelse = true;
+                Lex();
+            }
+            else {
+                if(sawelse) Error(_SC("else must be the final match branch"));
+                if(_token == TK_STRING_LITERAL)
+                    coveredChoices.push_back(std::basic_string<SQChar>(
+                        _lex._svalue, _lex._longstr.size() - 1));
+                Expression();
+                SQInteger pattern = _fs->PopTarget();
+                SQInteger comparison = pattern;
+                if(_fs->IsLocal(pattern)) comparison = _fs->PushTarget();
+                _fs->AddInstruction(_OP_EQ, comparison, pattern, subject);
+                _fs->AddInstruction(_OP_JZ, comparison, 0);
+                if(comparison != pattern) _fs->PopTarget();
+                nextbranch = _fs->GetCurrentPos();
+            }
+
+            Expect(TK_FATARROW);
+            BEGIN_SCOPE();
+            Statement();
+            if(_lex._prevtoken != _SC('}') && _lex._prevtoken != _SC(';')) OptionalSemicolon();
+            END_SCOPE();
+            if(_token != _SC('}')) {
+                _fs->AddInstruction(_OP_JMP, 0, 0);
+                endjumps.push_back(_fs->GetCurrentPos());
+            }
+        }
+
+        if(nextbranch != -1)
+            _fs->SetInstructionParam(nextbranch, 1, _fs->GetCurrentPos() - nextbranch);
+        Expect(_SC('}'));
+        if(!sawelse) {
+            if(subjectChoices.empty())
+                Error(_SC("non-exhaustive match requires an else branch"));
+            for(SQUnsignedInteger choice = 0; choice < subjectChoices.size(); ++choice) {
+                bool covered = false;
+                for(SQUnsignedInteger pattern = 0; pattern < coveredChoices.size(); ++pattern) {
+                    if(subjectChoices[choice] == coveredChoices[pattern]) {
+                        covered = true;
+                        break;
+                    }
+                }
+                if(!covered) Error(_SC("non-exhaustive match"));
+            }
+        }
+        for(SQUnsignedInteger i = 0; i < endjumps.size(); ++i)
+            _fs->SetInstructionParam(endjumps[i], 1, _fs->GetCurrentPos() - endjumps[i]);
+        _fs->PopTarget();
+    }
+    void PersistStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("persist is only allowed at root scope"));
+        Lex();
+        SQObject id = Expect(TK_IDENTIFIER);
+        OptionalTypeAnnotation();
+        Expect(_SC('='));
+
+        SQInteger oldstack = _fs->GetStackSize();
+        SQInteger root = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOADROOT, root);
+        SQInteger key = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOAD, key, _fs->GetConstant(id));
+        SQInteger exists = _fs->PushTarget();
+        _fs->AddInstruction(_OP_EXISTS, exists, root, key);
+        _fs->AddInstruction(_OP_JZ, exists, 1);
+        _fs->AddInstruction(_OP_JMP, 0, 0);
+        SQInteger endjump = _fs->GetCurrentPos();
+
+        _fs->PopTarget();
+        Expression();
+        SQInteger value = _fs->PopTarget();
+        _fs->AddInstruction(_OP_NEWSLOT, 0xFF, root, key, value);
+        _fs->SetInstructionParam(endjump, 1, _fs->GetCurrentPos() - endjump);
+        _fs->SetStackSize(oldstack);
+    }
+    void EmitImport(const SQObject &specifier, const SQObject &imported, const SQObject &local)
+    {
+        SQInteger module = _fs->PushTarget();
+        _fs->AddInstruction(_OP_IMPORT, module, _fs->GetConstant(specifier));
+        if(sq_type(imported) != OT_NULL) {
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(imported));
+            Emit2ArgsOP(_OP_GET);
+        }
+        _fs->PopTarget();
+        _fs->PushLocalVariable(local);
+    }
+    void ImportStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("import is only allowed at module root scope"));
+        Lex();
+        SQObjectPtrVec imported;
+        SQObjectPtrVec locals;
+        bool moduleNamespace = false;
+
+        if(_token == _SC('{')) {
+            Lex();
+            while(_token != _SC('}')) {
+                SQObject name = Expect(TK_IDENTIFIER);
+                SQObject local = name;
+                if(_token == TK_AS) {
+                    Lex();
+                    local = Expect(TK_IDENTIFIER);
+                }
+                imported.push_back(name);
+                locals.push_back(local);
+                if(_token == _SC(',')) Lex();
+                else if(_token != _SC('}')) Error(_SC("expected '}' or ',' in import list"));
+            }
+            Expect(_SC('}'));
+        }
+        else if(_token == _SC('*')) {
+            moduleNamespace = true;
+            Lex();
+            Expect(TK_AS);
+            locals.push_back(Expect(TK_IDENTIFIER));
+        }
+        else {
+            Error(_SC("expected '{' or '*' after import"));
+        }
+
+        Expect(TK_FROM);
+        SQObject specifier = Expect(TK_STRING_LITERAL);
+        if(_ss(_vm)->_moduledependencyhandler &&
+            SQ_FAILED(_ss(_vm)->_moduledependencyhandler(_vm, _stringval(_sourcename),
+                _stringval(specifier), _ss(_vm)->_modulehandleruser))) {
+            Error(_SC("unable to resolve imported module '%s'"), _stringval(specifier));
+        }
+
+        if(moduleNamespace) {
+            SQObject nullname;
+            nullname._type = OT_NULL;
+            nullname._unVal.raw = 0;
+            EmitImport(specifier, nullname, locals[0]);
+        }
+        else {
+            for(SQUnsignedInteger i = 0; i < imported.size(); ++i)
+                EmitImport(specifier, imported[i], locals[i]);
+        }
+    }
+    void EmitExport(const SQObject &name, SQInteger value)
+    {
+        _fs->AddInstruction(_OP_EXPORT, 0xFF, _fs->GetConstant(name), value);
+    }
+    void EmitNamedExport(const SQObject &name)
+    {
+        SQInteger root = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOADROOT, root);
+        SQInteger key = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOAD, key, _fs->GetConstant(name));
+        Emit2ArgsOP(_OP_GET);
+        SQInteger value = _fs->PopTarget();
+        EmitExport(name, value);
+    }
+    void ExportStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("export is only allowed at module root scope"));
+        Lex();
+        SQObject name;
+        if(_token == TK_FUNCTION) {
+            FunctionStatement(&name);
+            EmitNamedExport(name);
+        }
+        else if(_token == TK_ASYNC) {
+            Lex();
+            if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+            FunctionStatement(&name, true);
+            EmitNamedExport(name);
+        }
+        else if(_token == TK_CLASS) {
+            ClassStatement(&name);
+            EmitNamedExport(name);
+        }
+        else if(_token == TK_CONST) {
+            Lex();
+            name = Expect(TK_IDENTIFIER);
+            Expect(_SC('='));
+            SQObject value = ExpectScalar();
+            SQTable *constants = _table(_ss(_vm)->_consts);
+            SQObjectPtr strongname = name;
+            constants->NewSlot(strongname, SQObjectPtr(value));
+            strongname.Null();
+            SQInteger target = _fs->PushTarget();
+            _fs->AddInstruction(_OP_LOAD, target, _fs->GetConstant(value));
+            EmitExport(name, target);
+            _fs->PopTarget();
+        }
+        else {
+            Error(_SC("export requires a function, class, or const declaration"));
+        }
+    }
+    void AsyncFunctionStatement()
+    {
+        Lex();
+        if(_token != TK_FUNCTION) Error(_SC("async must be followed by function"));
+        FunctionStatement(NULL, true);
+    }
+    void FunctionStatement(SQObject *declared = NULL, bool async = false)
     {
         SQObject id;
         Lex(); id = Expect(TK_IDENTIFIER);
+        if(declared) *declared = id;
         _fs->PushTarget(0);
         _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(id));
         if(_token == TK_DOUBLE_COLON) Emit2ArgsOP(_OP_GET);
@@ -1311,15 +2088,19 @@ public:
             if(_token == TK_DOUBLE_COLON) Emit2ArgsOP(_OP_GET);
         }
         Expect(_SC('('));
-        CreateFunction(id);
+        CreateFunction(id, false, async);
         _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
         EmitDerefOp(_OP_NEWSLOT);
         _fs->PopTarget();
     }
-    void ClassStatement()
+    void ClassStatement(SQObject *declared = NULL)
     {
         SQExpState es;
         Lex();
+        if(declared) {
+            if(_token != TK_IDENTIFIER) Error(_SC("exported class name must be an identifier"));
+            *declared = _fs->CreateString(_lex._svalue);
+        }
         es = _es;
         _es.donot_get = true;
         PrefixedExpr();
@@ -1508,14 +2289,20 @@ public:
         }
         _es = es;
     }
-    void CreateFunction(SQObject &name,bool lambda = false)
+    void CreateFunction(SQObject &name,bool lambda = false, bool async = false)
     {
+        const auto previousChoiceSymbols = _choiceSymbols;
         SQFuncState *funcstate = _fs->PushChildState(_ss(_vm));
         funcstate->_name = name;
         SQObject paramname;
         funcstate->AddParameter(_fs->CreateString(_SC("this")));
         funcstate->_sourcename = _sourcename;
         SQInteger defparams = 0;
+        SQObjectPtrVec signatureParameters;
+        sqvector<SQScriptUnit> signatureUnits;
+        std::vector<std::vector<std::basic_string<SQChar> > > signatureChoices;
+        std::vector<std::basic_string<SQChar> > signatureTypes;
+        std::vector<bool> signatureNullable;
         while(_token!=_SC(')')) {
             if(_token == TK_VARPARAMS) {
                 if(defparams > 0) Error(_SC("function with default parameters cannot have variable number of parameters"));
@@ -1527,7 +2314,21 @@ public:
             }
             else {
                 paramname = Expect(TK_IDENTIFIER);
+                std::vector<std::basic_string<SQChar> > parameterChoices;
+                std::basic_string<SQChar> parameterType;
+                bool parameterNullable = true;
+                SQScriptUnit parameterUnit = OptionalTypeAnnotation(&parameterChoices, &parameterType,
+                                                                     &parameterNullable);
                 funcstate->AddParameter(paramname);
+                signatureParameters.push_back(paramname);
+                signatureUnits.push_back(parameterUnit);
+                signatureChoices.push_back(parameterChoices);
+                signatureTypes.push_back(parameterType);
+                signatureNullable.push_back(parameterNullable);
+                if(!parameterChoices.empty())
+                    _choiceSymbols[_stringval(paramname)] = parameterChoices;
+                else
+                    _choiceSymbols.erase(_stringval(paramname));
                 if(_token == _SC('=')) {
                     Lex();
                     Expression();
@@ -1542,13 +2343,53 @@ public:
             }
         }
         Expect(_SC(')'));
+        if(_token == TK_RETURN_TYPE) {
+            Lex();
+            TypeRef();
+        }
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
+        RegisterSignature(name, signatureParameters, signatureUnits, signatureChoices,
+                          signatureTypes, signatureNullable);
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
-        if(lambda) {
+        if(async) {
+            SQFuncState *asyncstate = _fs->PushChildState(_ss(_vm));
+            asyncstate->_name = _fs->CreateString(_SC("__eve_async_body"));
+            asyncstate->AddParameter(_fs->CreateString(_SC("this")));
+            asyncstate->_sourcename = _sourcename;
+            _fs = asyncstate;
+            ++_asyncdepth;
+            Statement(false);
+            --_asyncdepth;
+            asyncstate->AddLineInfos(_lex._prevtoken == _SC('\n')?_lex._lasttokenline:_lex._currentline, _lineinfo, true);
+            asyncstate->AddInstruction(_OP_RETURN, -1);
+            asyncstate->SetStackSize(0);
+            SQFunctionProto *asyncfunc = asyncstate->BuildProto();
+#ifdef _DEBUG_DUMP
+            asyncstate->Dump(asyncfunc);
+#endif
+            _fs = funcstate;
+            _fs->_functions.push_back(asyncfunc);
+            _fs->PopChildState();
+
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(),
+                                _fs->GetConstant(_fs->CreateString(_SC("__eve_async"))));
+            Emit2ArgsOP(_OP_GET);
+            _fs->AddInstruction(_OP_LOADROOT, _fs->PushTarget());
+            _fs->AddInstruction(_OP_CLOSURE, _fs->PushTarget(), _fs->_functions.size() - 1, 0);
+            _fs->AddInstruction(_OP_MOVE, _fs->PushTarget(), 0);
+            _fs->PopTarget();
+            _fs->PopTarget();
+            SQInteger stackbase = _fs->PopTarget();
+            SQInteger closure = _fs->PopTarget();
+            _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, 3);
+            _fs->AddInstruction(_OP_RETURN, 1, _fs->PopTarget(), _fs->GetStackSize());
+        }
+        else if(lambda) {
             Expression();
             _fs->AddInstruction(_OP_RETURN, 1, _fs->PopTarget());}
         else {
@@ -1565,6 +2406,7 @@ public:
         _fs = currchunk;
         _fs->_functions.push_back(func);
         _fs->PopChildState();
+        _choiceSymbols = previousChoiceSymbols;
     }
     void ResolveBreaks(SQFuncState *funcstate, SQInteger ntoresolve)
     {
@@ -1593,9 +2435,19 @@ private:
     SQLexer _lex;
     bool _lineinfo;
     bool _raiseerror;
+    bool _allowtypeannotation;
+    SQInteger _asyncdepth;
+    SQScriptUnit _expectedunit;
+    std::basic_string<SQChar> _expectedtype;
+    bool _expectednullable;
+    std::vector<std::basic_string<SQChar> > _expectedchoices;
+    std::map<std::basic_string<SQChar>, std::vector<std::basic_string<SQChar> > > _choiceSymbols;
     SQInteger _debugline;
     SQInteger _debugop;
     SQExpState   _es;
+    sqvector<SQInteger> _nullsafejumps;
+    std::vector<SQFunctionSignature> _signatures;
+    SQObjectPtr _activecallname;
     SQScope _scope;
     SQChar _compilererror[MAX_COMPILER_ERROR_LEN];
     jmp_buf _errorjmp;
