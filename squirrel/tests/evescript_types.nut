@@ -83,6 +83,12 @@ persist saved_score: int = make_score()
 assert(saved_score == 7)
 assert(persist_initializers == 1)
 
+function persist(name, initializer) {
+    return initializer()
+}
+local legacy_persist = persist("legacy", function() { return 11 })
+assert(legacy_persist == 11)
+
 __exports <- {}
 export const EXPORTED_VALUE = 9
 export function exported_twice(value: int) -> int { return value * 2 }

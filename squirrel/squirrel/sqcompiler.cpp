@@ -100,7 +100,7 @@ public:
     {
 
         if(_token != tok) {
-            if(_token == TK_CONSTRUCTOR && tok == TK_IDENTIFIER) {
+            if((_token == TK_CONSTRUCTOR || _token == TK_PERSIST) && tok == TK_IDENTIFIER) {
                 //do nothing
             }
             else {
@@ -132,7 +132,8 @@ public:
         switch(tok)
         {
         case TK_IDENTIFIER:
-            ret = _fs->CreateString(_lex._svalue);
+            ret = _token == TK_PERSIST ? _fs->CreateString(_SC("persist"), 7)
+                                       : _fs->CreateString(_lex._svalue);
             break;
         case TK_STRING_LITERAL:
             ret = _fs->CreateString(_lex._svalue,_lex._longstr.size()-1);
@@ -849,6 +850,7 @@ public:
             break;
         case TK_IDENTIFIER:
         case TK_CONSTRUCTOR:
+        case TK_PERSIST:
         case TK_THIS:{
                 SQObject id;
                 SQObject constant;
@@ -857,6 +859,7 @@ public:
                     case TK_IDENTIFIER:  id = _fs->CreateString(_lex._svalue);       break;
                     case TK_THIS:        id = _fs->CreateString(_SC("this"),4);        break;
                     case TK_CONSTRUCTOR: id = _fs->CreateString(_SC("constructor"),11); break;
+                    case TK_PERSIST:     id = _fs->CreateString(_SC("persist"),7);     break;
                 }
 
                 SQInteger pos = -1;
