@@ -14,6 +14,9 @@
 #include "sqvm.h"
 #include "sqtable.h"
 
+#include <string>
+#include <vector>
+
 #define EXPR   1
 #define OBJECT 2
 #define BASE   3
@@ -31,6 +34,11 @@ struct SQExpState {
 struct SQScope {
     SQInteger outers;
     SQInteger stacksize;
+};
+
+struct SQFunctionSignature {
+    std::basic_string<SQChar> name;
+    std::vector<std::basic_string<SQChar> > parameters;
 };
 
 #define BEGIN_SCOPE() SQScope __oldscope__ = _scope; \
@@ -721,6 +729,7 @@ public:
     void PrefixedExpr()
     {
         SQUnsignedInteger nullsafeBase = _nullsafejumps.size();
+        _activecallname.Null();
         SQInteger pos = Factor();
         for(;;) {
             switch(_token) {
@@ -734,8 +743,11 @@ public:
             case _SC('.'):
                 pos = -1;
                 Lex();
-
-                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
+                {
+                SQObject member = Expect(TK_IDENTIFIER);
+                _activecallname = member;
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(member));
+                }
                 if(_es.etype==BASE) {
                     Emit2ArgsOP(_OP_GET);
                     pos = _fs->TopTarget();
@@ -856,7 +868,10 @@ public:
                 SQObject constant;
 
                 switch(_token) {
-                    case TK_IDENTIFIER:  id = _fs->CreateString(_lex._svalue);       break;
+                    case TK_IDENTIFIER:
+                        id = _fs->CreateString(_lex._svalue);
+                        _activecallname = id;
+                        break;
                     case TK_THIS:        id = _fs->CreateString(_SC("this"),4);        break;
                     case TK_CONSTRUCTOR: id = _fs->CreateString(_SC("constructor"),11); break;
                     case TK_PERSIST:     id = _fs->CreateString(_SC("persist"),7);     break;
@@ -1047,10 +1062,22 @@ public:
     }
     void FunctionCallArgs(bool rawcall = false)
     {
+        const SQObjectPtr callName = _activecallname;
         SQInteger nargs = 1;//this
+        bool hasNamedArgs = false;
+        SQObjectPtrVec argumentNames;
+        sqvector<SQInteger> argumentTargets;
          while(_token != _SC(')')) {
+             SQObjectPtr argumentName;
+             if(_token == TK_IDENTIFIER && _lex._currdata == _SC(':')) {
+                 argumentName = Expect(TK_IDENTIFIER);
+                 Expect(_SC(':'));
+                 hasNamedArgs = true;
+             }
              Expression();
              MoveIfCurrentTargetIsLocal();
+             argumentNames.push_back(argumentName);
+             argumentTargets.push_back(_fs->TopTarget());
              nargs++;
              if(_token == _SC(',')){
                  Lex();
@@ -1058,6 +1085,60 @@ public:
              }
          }
          Lex();
+         if(hasNamedArgs) {
+             if(rawcall) Error(_SC("rawcall does not support named arguments"));
+             const SQFunctionSignature *signature = FindSignature(callName);
+             if(signature == NULL)
+                 Error(_SC("named arguments require a known function or Binding Contract"));
+             if(signature->parameters.size() != argumentNames.size())
+                 Error(_SC("missing named argument"));
+
+             sqvector<SQInteger> orderedTargets;
+             sqvector<SQBool> used;
+             used.resize(argumentNames.size(), SQFalse);
+             SQUnsignedInteger positional = 0;
+             for(SQUnsignedInteger p = 0; p < signature->parameters.size(); ++p) {
+                 SQInteger selected = -1;
+                 while(positional < argumentNames.size() && sq_isnull(argumentNames[positional])) {
+                     selected = static_cast<SQInteger>(positional++);
+                     break;
+                 }
+                 if(selected < 0) {
+                     for(SQUnsignedInteger a = 0; a < argumentNames.size(); ++a) {
+                         if(used[a] || sq_isnull(argumentNames[a])) continue;
+                         if(scstrcmp(_stringval(argumentNames[a]),
+                                     signature->parameters[p].c_str()) == 0) {
+                             selected = static_cast<SQInteger>(a);
+                             break;
+                         }
+                     }
+                 }
+                 if(selected < 0) Error(_SC("missing named argument"));
+                 if(used[selected]) Error(_SC("duplicate named argument"));
+                 used[selected] = SQTrue;
+                 orderedTargets.push_back(argumentTargets[selected]);
+             }
+             for(SQUnsignedInteger a = 0; a < argumentNames.size(); ++a) {
+                 if(!used[a]) Error(_SC("unknown or duplicate named argument"));
+             }
+
+             sqvector<SQInteger> temporaryTargets;
+             for(SQUnsignedInteger i = 0; i < orderedTargets.size(); ++i) {
+                 const SQInteger target = _fs->PushTarget();
+                 _fs->AddInstruction(_OP_MOVE, target, orderedTargets[i]);
+                 temporaryTargets.push_back(target);
+             }
+             for(SQUnsignedInteger i = 0; i < temporaryTargets.size(); ++i)
+                 _fs->AddInstruction(_OP_MOVE, argumentTargets[i], temporaryTargets[i]);
+             for(SQUnsignedInteger i = 0; i < temporaryTargets.size(); ++i)
+                 _fs->PopTarget();
+             for(SQUnsignedInteger i = 0; i < argumentTargets.size(); ++i)
+                 _fs->PopTarget();
+             SQInteger stackbase = _fs->PopTarget();
+             SQInteger closure = _fs->PopTarget();
+             _fs->AddInstruction(_OP_CALL, _fs->PushTarget(), closure, stackbase, nargs);
+             return;
+         }
          if (rawcall) {
              if (nargs < 3) Error(_SC("rawcall requires at least 2 parameters (callee and this)"));
              nargs -= 2; //removes callee and this from count
@@ -1090,6 +1171,48 @@ public:
 			 }
 			 Lex();
 		 }
+    }
+
+    const SQFunctionSignature *FindSignature(const SQObjectPtr &name)
+    {
+        if(sq_isnull(name) || sq_type(name) != OT_STRING) return NULL;
+        for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
+            if(scstrcmp(_signatures[i].name.c_str(), _stringval(name)) == 0)
+                return &_signatures[i];
+        }
+        if(_ss(_vm)->_namedargresolver) {
+            SQFunctionSignature signature;
+            signature.name = _stringval(name);
+            for(SQInteger index = 0;; ++index) {
+                const SQChar *parameter = _ss(_vm)->_namedargresolver(
+                    _vm, signature.name.c_str(), index, _ss(_vm)->_namedarguser);
+                if(parameter == NULL) break;
+                signature.parameters.push_back(parameter);
+            }
+            if(!signature.parameters.empty()) {
+                _signatures.push_back(signature);
+                return &_signatures.back();
+            }
+        }
+        return NULL;
+    }
+
+    void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters)
+    {
+        if(sq_type(name) != OT_STRING) return;
+        for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
+            if(scstrcmp(_signatures[i].name.c_str(), _stringval(name)) == 0) {
+                _signatures[i].parameters.clear();
+                for(SQUnsignedInteger p = 0; p < parameters.size(); ++p)
+                    _signatures[i].parameters.push_back(_stringval(parameters[p]));
+                return;
+            }
+        }
+        SQFunctionSignature signature;
+        signature.name = _stringval(name);
+        for(SQUnsignedInteger p = 0; p < parameters.size(); ++p)
+            signature.parameters.push_back(_stringval(parameters[p]));
+        _signatures.push_back(signature);
     }
     void ParseAnnotations()
     {
@@ -1874,6 +1997,7 @@ public:
         funcstate->AddParameter(_fs->CreateString(_SC("this")));
         funcstate->_sourcename = _sourcename;
         SQInteger defparams = 0;
+        SQObjectPtrVec signatureParameters;
         while(_token!=_SC(')')) {
             if(_token == TK_VARPARAMS) {
                 if(defparams > 0) Error(_SC("function with default parameters cannot have variable number of parameters"));
@@ -1887,6 +2011,7 @@ public:
                 paramname = Expect(TK_IDENTIFIER);
                 OptionalTypeAnnotation();
                 funcstate->AddParameter(paramname);
+                signatureParameters.push_back(paramname);
                 if(_token == _SC('=')) {
                     Lex();
                     Expression();
@@ -1908,6 +2033,7 @@ public:
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
+        RegisterSignature(name, signatureParameters);
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
@@ -1961,6 +2087,8 @@ private:
     SQInteger _debugop;
     SQExpState   _es;
     sqvector<SQInteger> _nullsafejumps;
+    std::vector<SQFunctionSignature> _signatures;
+    SQObjectPtr _activecallname;
     SQScope _scope;
     SQChar _compilererror[MAX_COMPILER_ERROR_LEN];
     jmp_buf _errorjmp;

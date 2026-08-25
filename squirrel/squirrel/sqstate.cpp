@@ -18,6 +18,8 @@ SQSharedState::SQSharedState()
     _moduledependencyhandler = NULL;
     _moduleimporthandler = NULL;
     _modulehandleruser = NULL;
+    _namedargresolver = NULL;
+    _namedarguser = NULL;
     _printfunc = NULL;
     _errorfunc = NULL;
     _debuginfo = false;

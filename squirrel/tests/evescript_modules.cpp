@@ -44,6 +44,14 @@ SQRESULT importModule(HSQUIRRELVM vm, const SQChar*, const SQChar* specifier,
     return SQ_OK;
 }
 
+const SQChar* namedParameters(HSQUIRRELVM, const SQChar* callee, SQInteger index,
+                              SQUserPointer) {
+    if (std::strcmp(callee, "nativeCall") != 0)
+        return nullptr;
+    static const char* names[] = {"first", "second"};
+    return index >= 0 && index < 2 ? names[index] : nullptr;
+}
+
 } // namespace
 
 int main() {
@@ -68,6 +76,22 @@ int main() {
         ok = SQ_SUCCEEDED(sq_call(vm, 1, SQFalse, SQTrue));
     }
     ok = ok && fixture.dependencyCalls == 2 && fixture.importCalls == 3;
+
+    const auto compileFails = [vm](const char* invalid) {
+        const SQInteger top = sq_gettop(vm);
+        const bool failed = SQ_FAILED(sq_compilebuffer(
+            vm, invalid, static_cast<SQInteger>(std::strlen(invalid)), "named_error.nut", SQFalse));
+        sq_settop(vm, top);
+        return failed;
+    };
+    ok = ok && compileFails("function f(a, b) {}\nf(a: 1)\n");
+    ok = ok && compileFails("function f(a, b) {}\nf(a: 1, a: 2)\n");
+    ok = ok && compileFails("unknown_named(value: 1)\n");
+    sq_setnamedargresolver(vm, namedParameters, nullptr);
+    const char* nativeNamed = "nativeCall(second: 2, first: 1)\n";
+    ok = ok && SQ_SUCCEEDED(sq_compilebuffer(
+                   vm, nativeNamed, static_cast<SQInteger>(std::strlen(nativeNamed)),
+                   "native_named.nut", SQFalse));
 
     if (!sq_isnull(fixture.exports))
         sq_release(vm, &fixture.exports);

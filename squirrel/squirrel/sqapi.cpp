@@ -1265,6 +1265,12 @@ void sq_setmodulehandlers(HSQUIRRELVM v,SQMODULEDEPENDENCY dependency,SQMODULEIM
     _ss(v)->_modulehandleruser = user;
 }
 
+void sq_setnamedargresolver(HSQUIRRELVM v,SQNAMEDARGRESOLVER resolver,SQUserPointer user)
+{
+    _ss(v)->_namedargresolver = resolver;
+    _ss(v)->_namedarguser = user;
+}
+
 SQRESULT sq_writeclosure(HSQUIRRELVM v,SQWRITEFUNC w,SQUserPointer up)
 {
     SQObjectPtr *o = NULL;

@@ -89,6 +89,24 @@ function persist(name, initializer) {
 local legacy_persist = persist("legacy", function() { return 11 })
 assert(legacy_persist == 11)
 
+local named_order = []
+function named_value(tag, value) {
+    named_order.append(tag)
+    return value
+}
+function compose_digits(first: int, second: int, third: int) -> int {
+    return first * 100 + second * 10 + third
+}
+local named_result = compose_digits(
+    third: named_value("third", 3),
+    first: named_value("first", 1),
+    second: named_value("second", 2)
+)
+assert(named_result == 123)
+assert(named_order[0] == "third")
+assert(named_order[1] == "first")
+assert(named_order[2] == "second")
+
 __exports <- {}
 export const EXPORTED_VALUE = 9
 export function exported_twice(value: int) -> int { return value * 2 }

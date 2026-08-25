@@ -108,6 +108,8 @@ public:
     SQMODULEDEPENDENCY _moduledependencyhandler;
     SQMODULEIMPORT _moduleimporthandler;
     SQUserPointer _modulehandleruser;
+    SQNAMEDARGRESOLVER _namedargresolver;
+    SQUserPointer _namedarguser;
     SQPRINTFUNCTION _printfunc;
     SQPRINTFUNCTION _errorfunc;
     bool _debuginfo;
