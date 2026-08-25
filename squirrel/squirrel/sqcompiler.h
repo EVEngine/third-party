@@ -75,6 +75,8 @@ struct SQVM;
 #define TK_NULLSAFE 327
 #define TK_NULLCOALESCE 328
 #define TK_NULLCOALESCE_ASSIGN 329
+#define TK_MATCH 330
+#define TK_FATARROW 331
 
 
 

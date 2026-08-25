@@ -68,6 +68,7 @@ void SQLexer::Init(SQSharedState *ss, SQLEXREADFUNC rg, SQUserPointer up,Compile
     ADD_KEYWORD(__LINE__,TK___LINE__);
     ADD_KEYWORD(__FILE__,TK___FILE__);
     ADD_KEYWORD(rawcall, TK_RAWCALL);
+    ADD_KEYWORD(match, TK_MATCH);
 
 
     _readf = rg;
@@ -162,8 +163,9 @@ SQInteger SQLexer::Lex()
             }
         case _SC('='):
             NEXT();
-            if (CUR_CHAR != _SC('=')){ RETURN_TOKEN('=') }
-            else { NEXT(); RETURN_TOKEN(TK_EQ); }
+            if (CUR_CHAR == _SC('=')){ NEXT(); RETURN_TOKEN(TK_EQ); }
+            if (CUR_CHAR == _SC('>')){ NEXT(); RETURN_TOKEN(TK_FATARROW); }
+            RETURN_TOKEN('=');
         case _SC('<'):
             NEXT();
             switch(CUR_CHAR) {

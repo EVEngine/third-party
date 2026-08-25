@@ -48,4 +48,20 @@ assert(holder.value == "created")
 holder.value ??= "replaced"
 assert(holder.value == "created")
 
+local matched = ""
+function select_mode(mode: "idle" | "running") {
+    match mode {
+        "idle" => matched = "i"
+        "running" => matched = "r"
+    }
+}
+select_mode("running")
+assert(matched == "r")
+
+match "unknown" {
+    "known" => matched = "known"
+    else => matched = "fallback"
+}
+assert(matched == "fallback")
+
 print("evescript type erasure: ok\n")

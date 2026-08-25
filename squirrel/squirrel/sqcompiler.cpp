@@ -252,6 +252,7 @@ public:
         case TK_FOR:        ForStatement();         break;
         case TK_FOREACH:    ForEachStatement();     break;
         case TK_SWITCH: SwitchStatement();      break;
+        case TK_MATCH:   MatchStatement();       break;
         case TK_LOCAL:      LocalDeclStatement();   break;
         case TK_RETURN:
         case TK_YIELD: {
@@ -1416,6 +1417,57 @@ public:
         __nbreaks__ = _fs->_unresolvedbreaks.size() - __nbreaks__;
         if(__nbreaks__ > 0)ResolveBreaks(_fs, __nbreaks__);
         _fs->_breaktargets.pop_back();
+    }
+    void MatchStatement()
+    {
+        Lex();
+        Expression();
+        Expect(_SC('{'));
+        SQInteger subject = _fs->TopTarget();
+        SQInteger nextbranch = -1;
+        sqvector<SQInteger> endjumps;
+        bool sawelse = false;
+
+        while(_token != _SC('}')) {
+            if(nextbranch != -1) {
+                _fs->SetInstructionParam(nextbranch, 1, _fs->GetCurrentPos() - nextbranch);
+                nextbranch = -1;
+            }
+
+            if(_token == TK_ELSE) {
+                if(sawelse) Error(_SC("duplicate else branch in match"));
+                sawelse = true;
+                Lex();
+            }
+            else {
+                if(sawelse) Error(_SC("else must be the final match branch"));
+                Expression();
+                SQInteger pattern = _fs->PopTarget();
+                SQInteger comparison = pattern;
+                if(_fs->IsLocal(pattern)) comparison = _fs->PushTarget();
+                _fs->AddInstruction(_OP_EQ, comparison, pattern, subject);
+                _fs->AddInstruction(_OP_JZ, comparison, 0);
+                if(comparison != pattern) _fs->PopTarget();
+                nextbranch = _fs->GetCurrentPos();
+            }
+
+            Expect(TK_FATARROW);
+            BEGIN_SCOPE();
+            Statement();
+            if(_lex._prevtoken != _SC('}') && _lex._prevtoken != _SC(';')) OptionalSemicolon();
+            END_SCOPE();
+            if(_token != _SC('}')) {
+                _fs->AddInstruction(_OP_JMP, 0, 0);
+                endjumps.push_back(_fs->GetCurrentPos());
+            }
+        }
+
+        if(nextbranch != -1)
+            _fs->SetInstructionParam(nextbranch, 1, _fs->GetCurrentPos() - nextbranch);
+        Expect(_SC('}'));
+        for(SQUnsignedInteger i = 0; i < endjumps.size(); ++i)
+            _fs->SetInstructionParam(endjumps[i], 1, _fs->GetCurrentPos() - endjumps[i]);
+        _fs->PopTarget();
     }
     void FunctionStatement()
     {
