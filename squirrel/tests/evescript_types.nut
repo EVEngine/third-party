@@ -118,6 +118,10 @@ local quarter_turn = angle_identity(90deg)
 assert(quarter_turn > 1.5707 && quarter_turn < 1.5709)
 local raw_milliseconds = 250ms
 assert(raw_milliseconds == 250.0)
+local typed_mode: "idle" | "run" | "jump" = "idle"
+function typed_mode_identity(mode: "idle" | "run" | "jump") { return mode }
+assert(typed_mode == "idle")
+assert(typed_mode_identity("run") == "run")
 
 __exports <- {}
 export const EXPORTED_VALUE = 9

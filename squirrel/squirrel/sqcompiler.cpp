@@ -14,6 +14,7 @@
 #include "sqvm.h"
 #include "sqtable.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,7 @@ enum SQScriptUnit {
 struct SQFunctionParameter {
     std::basic_string<SQChar> name;
     SQScriptUnit unit;
+    std::vector<std::basic_string<SQChar> > choices;
 };
 
 struct SQFunctionSignature {
@@ -183,10 +185,13 @@ public:
         if(scstrcmp(name, _SC("meters")) == 0) return UNIT_METERS;
         return UNIT_NONE;
     }
-    SQScriptUnit TypeRef()
+    SQScriptUnit TypeRef(std::vector<std::basic_string<SQChar> > *choices = NULL)
     {
         SQScriptUnit unit = UNIT_NONE;
         if(_token == TK_STRING_LITERAL) {
+            if(choices != NULL)
+                choices->push_back(std::basic_string<SQChar>(_lex._svalue,
+                                                             _lex._longstr.size() - 1));
             Lex();
         }
         else {
@@ -209,15 +214,16 @@ public:
         if(_token == _SC('?')) Lex();
         while(_token == _SC('|')) {
             Lex();
-            TypeRef();
+            TypeRef(choices);
         }
         return unit;
     }
-    SQScriptUnit OptionalTypeAnnotation()
+    SQScriptUnit OptionalTypeAnnotation(
+        std::vector<std::basic_string<SQChar> > *choices = NULL)
     {
         if(_token == _SC(':')) {
             Lex();
-            return TypeRef();
+            return TypeRef(choices);
         }
         return UNIT_NONE;
     }
@@ -450,12 +456,13 @@ public:
     {
          SQExpState es = _es;
         SQScriptUnit assignmentUnit = UNIT_NONE;
+        std::vector<std::basic_string<SQChar> > assignmentChoices;
         _es.etype     = EXPR;
         _es.epos      = -1;
         _es.donot_get = false;
         NullCoalesceExp();
         if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
-            assignmentUnit = OptionalTypeAnnotation();
+            assignmentUnit = OptionalTypeAnnotation(&assignmentChoices);
         }
         switch(_token)  {
         case _SC('='):
@@ -472,9 +479,12 @@ public:
             else if(ds == BASE) Error(_SC("'base' cannot be modified"));
             Lex();
             SQScriptUnit previousUnit = _expectedunit;
+            std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
             if(assignmentUnit != UNIT_NONE) _expectedunit = assignmentUnit;
+            if(!assignmentChoices.empty()) _expectedchoices = assignmentChoices;
             Expression();
             _expectedunit = previousUnit;
+            _expectedchoices = previousChoices;
 
             switch(op){
             case TK_NEWSLOT:
@@ -918,6 +928,16 @@ public:
         switch(_token)
         {
         case TK_STRING_LITERAL:
+            if(!_expectedchoices.empty()) {
+                bool allowed = false;
+                for(SQUnsignedInteger i = 0; i < _expectedchoices.size(); ++i) {
+                    if(scstrcmp(_expectedchoices[i].c_str(), _lex._svalue) == 0) {
+                        allowed = true;
+                        break;
+                    }
+                }
+                if(!allowed) Error(_SC("string is outside the allowed choices"));
+            }
             _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(_fs->CreateString(_lex._svalue,_lex._longstr.size()-1)));
             Lex();
             break;
@@ -1155,11 +1175,16 @@ public:
                  }
              }
              SQScriptUnit previousUnit = _expectedunit;
+             std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
              if(callSignature != NULL && parameterIndex >= 0 &&
-                static_cast<SQUnsignedInteger>(parameterIndex) < callSignature->parameters.size())
+                static_cast<SQUnsignedInteger>(parameterIndex) < callSignature->parameters.size()) {
                  _expectedunit = callSignature->parameters[parameterIndex].unit;
+                 if(!callSignature->parameters[parameterIndex].choices.empty())
+                     _expectedchoices = callSignature->parameters[parameterIndex].choices;
+             }
              Expression();
              _expectedunit = previousUnit;
+             _expectedchoices = previousChoices;
              MoveIfCurrentTargetIsLocal();
              argumentNames.push_back(argumentName);
              argumentTargets.push_back(_fs->TopTarget());
@@ -1270,12 +1295,24 @@ public:
             signature.name = _stringval(name);
             for(SQInteger index = 0;; ++index) {
                 const SQChar *unitName = NULL;
+                const SQChar *choiceNames = NULL;
                 const SQChar *parameter = _ss(_vm)->_namedargresolver(
-                    _vm, signature.name.c_str(), index, &unitName, _ss(_vm)->_namedarguser);
+                    _vm, signature.name.c_str(), index, &unitName, &choiceNames,
+                    _ss(_vm)->_namedarguser);
                 if(parameter == NULL) break;
                 SQFunctionParameter resolved;
                 resolved.name = parameter;
                 resolved.unit = unitName == NULL ? UNIT_NONE : UnitFromName(unitName);
+                if(choiceNames != NULL) {
+                    const SQChar *begin = choiceNames;
+                    for(const SQChar *cursor = choiceNames;; ++cursor) {
+                        if(*cursor == _SC(',') || *cursor == _SC('\0')) {
+                            resolved.choices.push_back(std::basic_string<SQChar>(begin, cursor));
+                            if(*cursor == _SC('\0')) break;
+                            begin = cursor + 1;
+                        }
+                    }
+                }
                 signature.parameters.push_back(resolved);
             }
             if(!signature.parameters.empty()) {
@@ -1287,7 +1324,8 @@ public:
     }
 
     void RegisterSignature(const SQObject &name, const SQObjectPtrVec &parameters,
-                           const sqvector<SQScriptUnit> &units)
+                           const sqvector<SQScriptUnit> &units,
+                           const std::vector<std::vector<std::basic_string<SQChar> > > &choices)
     {
         if(sq_type(name) != OT_STRING) return;
         for(SQUnsignedInteger i = 0; i < _signatures.size(); ++i) {
@@ -1297,6 +1335,7 @@ public:
                     SQFunctionParameter parameter;
                     parameter.name = _stringval(parameters[p]);
                     parameter.unit = units[p];
+                    parameter.choices = choices[p];
                     _signatures[i].parameters.push_back(parameter);
                 }
                 return;
@@ -1308,6 +1347,7 @@ public:
             SQFunctionParameter parameter;
             parameter.name = _stringval(parameters[p]);
             parameter.unit = units[p];
+            parameter.choices = choices[p];
             signature.parameters.push_back(parameter);
         }
         _signatures.push_back(signature);
@@ -1394,12 +1434,16 @@ public:
             default :
                 _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(Expect(TK_IDENTIFIER)));
                 {
-                SQScriptUnit declaredUnit = OptionalTypeAnnotation();
+                std::vector<std::basic_string<SQChar> > declaredChoices;
+                SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices);
                 Expect(_SC('='));
                 SQScriptUnit previousUnit = _expectedunit;
+                std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
                 if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
                 Expression();
                 _expectedunit = previousUnit;
+                _expectedchoices = previousChoices;
                 }
             }
             if(_token == separator) Lex();//optional comma/semicolon
@@ -1439,13 +1483,21 @@ public:
 
         do {
             varname = Expect(TK_IDENTIFIER);
-            SQScriptUnit declaredUnit = OptionalTypeAnnotation();
+            std::vector<std::basic_string<SQChar> > declaredChoices;
+            SQScriptUnit declaredUnit = OptionalTypeAnnotation(&declaredChoices);
+            if(!declaredChoices.empty())
+                _choiceSymbols[_stringval(varname)] = declaredChoices;
+            else
+                _choiceSymbols.erase(_stringval(varname));
             if(_token == _SC('=')) {
                 Lex();
                 SQScriptUnit previousUnit = _expectedunit;
+                std::vector<std::basic_string<SQChar> > previousChoices = _expectedchoices;
                 if(declaredUnit != UNIT_NONE) _expectedunit = declaredUnit;
+                if(!declaredChoices.empty()) _expectedchoices = declaredChoices;
                 Expression();
                 _expectedunit = previousUnit;
+                _expectedchoices = previousChoices;
                 SQInteger src = _fs->PopTarget();
                 SQInteger dest = _fs->PushTarget();
                 if(dest != src) _fs->AddInstruction(_OP_MOVE, dest, src);
@@ -1697,12 +1749,19 @@ public:
     void MatchStatement()
     {
         Lex();
+        std::vector<std::basic_string<SQChar> > subjectChoices;
+        if(_token == TK_IDENTIFIER) {
+            const std::basic_string<SQChar> subjectName(_lex._svalue);
+            const auto found = _choiceSymbols.find(subjectName);
+            if(found != _choiceSymbols.end()) subjectChoices = found->second;
+        }
         Expression();
         Expect(_SC('{'));
         SQInteger subject = _fs->TopTarget();
         SQInteger nextbranch = -1;
         sqvector<SQInteger> endjumps;
         bool sawelse = false;
+        std::vector<std::basic_string<SQChar> > coveredChoices;
 
         while(_token != _SC('}')) {
             if(nextbranch != -1) {
@@ -1717,6 +1776,9 @@ public:
             }
             else {
                 if(sawelse) Error(_SC("else must be the final match branch"));
+                if(_token == TK_STRING_LITERAL)
+                    coveredChoices.push_back(std::basic_string<SQChar>(
+                        _lex._svalue, _lex._longstr.size() - 1));
                 Expression();
                 SQInteger pattern = _fs->PopTarget();
                 SQInteger comparison = pattern;
@@ -1741,6 +1803,20 @@ public:
         if(nextbranch != -1)
             _fs->SetInstructionParam(nextbranch, 1, _fs->GetCurrentPos() - nextbranch);
         Expect(_SC('}'));
+        if(!sawelse) {
+            if(subjectChoices.empty())
+                Error(_SC("non-exhaustive match requires an else branch"));
+            for(SQUnsignedInteger choice = 0; choice < subjectChoices.size(); ++choice) {
+                bool covered = false;
+                for(SQUnsignedInteger pattern = 0; pattern < coveredChoices.size(); ++pattern) {
+                    if(subjectChoices[choice] == coveredChoices[pattern]) {
+                        covered = true;
+                        break;
+                    }
+                }
+                if(!covered) Error(_SC("non-exhaustive match"));
+            }
+        }
         for(SQUnsignedInteger i = 0; i < endjumps.size(); ++i)
             _fs->SetInstructionParam(endjumps[i], 1, _fs->GetCurrentPos() - endjumps[i]);
         _fs->PopTarget();
@@ -2099,6 +2175,7 @@ public:
     }
     void CreateFunction(SQObject &name,bool lambda = false)
     {
+        const auto previousChoiceSymbols = _choiceSymbols;
         SQFuncState *funcstate = _fs->PushChildState(_ss(_vm));
         funcstate->_name = name;
         SQObject paramname;
@@ -2107,6 +2184,7 @@ public:
         SQInteger defparams = 0;
         SQObjectPtrVec signatureParameters;
         sqvector<SQScriptUnit> signatureUnits;
+        std::vector<std::vector<std::basic_string<SQChar> > > signatureChoices;
         while(_token!=_SC(')')) {
             if(_token == TK_VARPARAMS) {
                 if(defparams > 0) Error(_SC("function with default parameters cannot have variable number of parameters"));
@@ -2118,10 +2196,16 @@ public:
             }
             else {
                 paramname = Expect(TK_IDENTIFIER);
-                SQScriptUnit parameterUnit = OptionalTypeAnnotation();
+                std::vector<std::basic_string<SQChar> > parameterChoices;
+                SQScriptUnit parameterUnit = OptionalTypeAnnotation(&parameterChoices);
                 funcstate->AddParameter(paramname);
                 signatureParameters.push_back(paramname);
                 signatureUnits.push_back(parameterUnit);
+                signatureChoices.push_back(parameterChoices);
+                if(!parameterChoices.empty())
+                    _choiceSymbols[_stringval(paramname)] = parameterChoices;
+                else
+                    _choiceSymbols.erase(_stringval(paramname));
                 if(_token == _SC('=')) {
                     Lex();
                     Expression();
@@ -2143,7 +2227,7 @@ public:
         for(SQInteger n = 0; n < defparams; n++) {
             _fs->PopTarget();
         }
-        RegisterSignature(name, signatureParameters, signatureUnits);
+        RegisterSignature(name, signatureParameters, signatureUnits, signatureChoices);
 
         SQFuncState *currchunk = _fs;
         _fs = funcstate;
@@ -2164,6 +2248,7 @@ public:
         _fs = currchunk;
         _fs->_functions.push_back(func);
         _fs->PopChildState();
+        _choiceSymbols = previousChoiceSymbols;
     }
     void ResolveBreaks(SQFuncState *funcstate, SQInteger ntoresolve)
     {
@@ -2194,6 +2279,8 @@ private:
     bool _raiseerror;
     bool _allowtypeannotation;
     SQScriptUnit _expectedunit;
+    std::vector<std::basic_string<SQChar> > _expectedchoices;
+    std::map<std::basic_string<SQChar>, std::vector<std::basic_string<SQChar> > > _choiceSymbols;
     SQInteger _debugline;
     SQInteger _debugop;
     SQExpState   _es;

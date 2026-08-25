@@ -45,7 +45,7 @@ SQRESULT importModule(HSQUIRRELVM vm, const SQChar*, const SQChar* specifier,
 }
 
 const SQChar* namedParameters(HSQUIRRELVM, const SQChar* callee, SQInteger index,
-                              const SQChar**, SQUserPointer) {
+                              const SQChar**, const SQChar**, SQUserPointer) {
     if (std::strcmp(callee, "nativeCall") != 0)
         return nullptr;
     static const char* names[] = {"first", "second"};
@@ -88,6 +88,13 @@ int main() {
     ok = ok && compileFails("function f(a, b) {}\nf(a: 1, a: 2)\n");
     ok = ok && compileFails("unknown_named(value: 1)\n");
     ok = ok && compileFails("function pixelsOnly(value: pixels) {}\npixelsOnly(1m)\n");
+    ok = ok && compileFails("local mode: \"idle\" | \"run\" = \"broken\"\n");
+    ok = ok && compileFails(
+                   "function setMode(mode: \"idle\" | \"run\") {}\nsetMode(\"broken\")\n");
+    ok = ok && compileFails("function choose(mode: \"idle\" | \"run\") {\n"
+                            "  match mode { \"idle\" => return 1 }\n}\n");
+    ok = ok && compileFails("local dynamicMode = \"idle\"\n"
+                            "match dynamicMode { \"idle\" => print(\"i\") }\n");
     sq_setnamedargresolver(vm, namedParameters, nullptr);
     const char* nativeNamed = "nativeCall(second: 2, first: 1)\n";
     ok = ok && SQ_SUCCEEDED(sq_compilebuffer(
