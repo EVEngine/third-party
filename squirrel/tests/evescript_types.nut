@@ -64,4 +64,14 @@ match "unknown" {
 }
 assert(matched == "fallback")
 
+local persist_initializers = 0
+function make_score() {
+    persist_initializers++
+    return 7
+}
+persist saved_score: int = make_score()
+persist saved_score: int = make_score()
+assert(saved_score == 7)
+assert(persist_initializers == 1)
+
 print("evescript type erasure: ok\n")

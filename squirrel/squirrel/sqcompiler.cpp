@@ -253,6 +253,7 @@ public:
         case TK_FOREACH:    ForEachStatement();     break;
         case TK_SWITCH: SwitchStatement();      break;
         case TK_MATCH:   MatchStatement();       break;
+        case TK_PERSIST: PersistStatement();     break;
         case TK_LOCAL:      LocalDeclStatement();   break;
         case TK_RETURN:
         case TK_YIELD: {
@@ -1468,6 +1469,32 @@ public:
         for(SQUnsignedInteger i = 0; i < endjumps.size(); ++i)
             _fs->SetInstructionParam(endjumps[i], 1, _fs->GetCurrentPos() - endjumps[i]);
         _fs->PopTarget();
+    }
+    void PersistStatement()
+    {
+        if(_fs->_parent != NULL) Error(_SC("persist is only allowed at root scope"));
+        Lex();
+        SQObject id = Expect(TK_IDENTIFIER);
+        OptionalTypeAnnotation();
+        Expect(_SC('='));
+
+        SQInteger oldstack = _fs->GetStackSize();
+        SQInteger root = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOADROOT, root);
+        SQInteger key = _fs->PushTarget();
+        _fs->AddInstruction(_OP_LOAD, key, _fs->GetConstant(id));
+        SQInteger exists = _fs->PushTarget();
+        _fs->AddInstruction(_OP_EXISTS, exists, root, key);
+        _fs->AddInstruction(_OP_JZ, exists, 1);
+        _fs->AddInstruction(_OP_JMP, 0, 0);
+        SQInteger endjump = _fs->GetCurrentPos();
+
+        _fs->PopTarget();
+        Expression();
+        SQInteger value = _fs->PopTarget();
+        _fs->AddInstruction(_OP_NEWSLOT, 0xFF, root, key, value);
+        _fs->SetInstructionParam(endjump, 1, _fs->GetCurrentPos() - endjump);
+        _fs->SetStackSize(oldstack);
     }
     void FunctionStatement()
     {
