@@ -72,6 +72,9 @@ struct SQVM;
 #define TK_CONST 324
 #define TK_RAWCALL 325
 #define TK_RETURN_TYPE 326
+#define TK_NULLSAFE 327
+#define TK_NULLCOALESCE 328
+#define TK_NULLCOALESCE_ASSIGN 329
 
 
 

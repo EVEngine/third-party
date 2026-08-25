@@ -215,8 +215,17 @@ SQInteger SQLexer::Lex()
             }
             Error(_SC("error parsing the string"));
             }
+        case _SC('?'):
+            NEXT();
+            if(CUR_CHAR == _SC('.')) { NEXT(); RETURN_TOKEN(TK_NULLSAFE); }
+            if(CUR_CHAR == _SC('?')) {
+                NEXT();
+                if(CUR_CHAR == _SC('=')) { NEXT(); RETURN_TOKEN(TK_NULLCOALESCE_ASSIGN); }
+                RETURN_TOKEN(TK_NULLCOALESCE);
+            }
+            RETURN_TOKEN('?');
         case _SC('{'): case _SC('}'): case _SC('('): case _SC(')'): case _SC('['): case _SC(']'):
-        case _SC(';'): case _SC(','): case _SC('?'): case _SC('^'): case _SC('~'):
+        case _SC(';'): case _SC(','): case _SC('^'): case _SC('~'):
             {SQInteger ret = CUR_CHAR;
             NEXT(); RETURN_TOKEN(ret); }
         case _SC('.'):

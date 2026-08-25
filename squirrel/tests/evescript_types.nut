@@ -24,4 +24,28 @@ root_actor: Actor? <- Actor()
 assert(root_actor.name == "Ada")
 assert(root_actor.damage(3) == false)
 
+local missing: Actor? = null
+local fallback_calls = 0
+function fallback_actor() -> Actor {
+    fallback_calls++
+    return Actor()
+}
+
+assert(missing?.name == null)
+assert(root_actor?.name == "Ada")
+assert((missing ?? root_actor).name == "Ada")
+assert((root_actor ?? fallback_actor()).name == "Ada")
+assert(fallback_calls == 0)
+missing ??= fallback_actor()
+assert(missing.name == "Ada")
+assert(fallback_calls == 1)
+missing ??= fallback_actor()
+assert(fallback_calls == 1)
+
+local holder = { value = null }
+holder.value ??= "created"
+assert(holder.value == "created")
+holder.value ??= "replaced"
+assert(holder.value == "created")
+
 print("evescript type erasure: ok\n")

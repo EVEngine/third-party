@@ -409,7 +409,7 @@ public:
         _es.etype     = EXPR;
         _es.epos      = -1;
         _es.donot_get = false;
-        LogicalOrExp();
+        NullCoalesceExp();
         if(_allowtypeannotation && _token == _SC(':') && _es.etype != EXPR) {
             OptionalTypeAnnotation();
         }
@@ -464,6 +464,49 @@ public:
                 EmitCompoundArith(op, ds, pos);
                 break;
             }
+            }
+            break;
+        case TK_NULLCOALESCE_ASSIGN: {
+            SQInteger ds = _es.etype;
+            SQInteger pos = _es.epos;
+            if(ds == EXPR || ds == BASE) Error(_SC("invalid target for '??='"));
+
+            if(ds == LOCAL) {
+                SQInteger target = _fs->TopTarget();
+                _fs->AddInstruction(_OP_NULLCOALESCE, target, 0, target, 0);
+                SQInteger jpos = _fs->GetCurrentPos();
+                Lex(); Expression();
+                SQInteger src = _fs->PopTarget();
+                if(target != src) _fs->AddInstruction(_OP_MOVE, target, src);
+                _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            }
+            else if(ds == OUTER) {
+                SQInteger target = _fs->PushTarget();
+                _fs->AddInstruction(_OP_GETOUTER, target, pos);
+                _fs->AddInstruction(_OP_NULLCOALESCE, target, 0, target, 0);
+                SQInteger jpos = _fs->GetCurrentPos();
+                Lex(); Expression();
+                SQInteger src = _fs->PopTarget();
+                _fs->AddInstruction(_OP_SETOUTER, target, pos, src);
+                _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            }
+            else {
+                SQInteger key = _fs->TopTarget();
+                SQInteger object = key - 1;
+                SQInteger existing = _fs->PushTarget();
+                _fs->AddInstruction(_OP_GET, existing, object, key);
+                _fs->AddInstruction(_OP_JNULL, existing, 0);
+                SQInteger nullpos = _fs->GetCurrentPos();
+                _fs->AddInstruction(_OP_MOVE, object, existing);
+                _fs->AddInstruction(_OP_JMP, 0, 0);
+                SQInteger endpos = _fs->GetCurrentPos();
+                _fs->PopTarget();
+                Lex(); Expression();
+                EmitDerefOp(_OP_SET);
+                _fs->SetInstructionParam(nullpos, 1, endpos - nullpos);
+                _fs->SetInstructionParam(endpos, 1, _fs->GetCurrentPos() - endpos);
+            }
+            _es.etype = EXPR;
             }
             break;
         case _SC('?'): {
@@ -527,6 +570,24 @@ public:
             _es.etype = EXPR;
             break;
         }else return;
+    }
+    void NullCoalesceExp()
+    {
+        LogicalOrExp();
+        if(_token == TK_NULLCOALESCE) {
+            SQInteger first_exp = _fs->PopTarget();
+            SQInteger trg = _fs->PushTarget();
+            _fs->AddInstruction(_OP_NULLCOALESCE, trg, 0, first_exp, 0);
+            SQInteger jpos = _fs->GetCurrentPos();
+            if(trg != first_exp) _fs->AddInstruction(_OP_MOVE, trg, first_exp);
+            Lex(); INVOKE_EXP(&SQCompiler::NullCoalesceExp);
+            _fs->SnoozeOpt();
+            SQInteger second_exp = _fs->PopTarget();
+            if(trg != second_exp) _fs->AddInstruction(_OP_MOVE, trg, second_exp);
+            _fs->SnoozeOpt();
+            _fs->SetInstructionParam(jpos, 1, _fs->GetCurrentPos() - jpos);
+            _es.etype = EXPR;
+        }
     }
     void LogicalAndExp()
     {
@@ -654,9 +715,17 @@ public:
     //if 'pos' != -1 the previous variable is a local variable
     void PrefixedExpr()
     {
+        SQUnsignedInteger nullsafeBase = _nullsafejumps.size();
         SQInteger pos = Factor();
         for(;;) {
             switch(_token) {
+            case TK_NULLSAFE: {
+                SQInteger receiver = _fs->TopTarget();
+                _fs->AddInstruction(_OP_JNULL, receiver, 0);
+                _nullsafejumps.push_back(_fs->GetCurrentPos());
+                _token = _SC('.');
+                }
+                break;
             case _SC('.'):
                 pos = -1;
                 Lex();
@@ -748,7 +817,13 @@ public:
                 Lex();
                 FunctionCallArgs();
                 break;
-            default: return;
+            default:
+                while(_nullsafejumps.size() > nullsafeBase) {
+                    SQInteger pos = _nullsafejumps.back();
+                    _nullsafejumps.pop_back();
+                    _fs->SetInstructionParam(pos, 1, _fs->GetCurrentPos() - pos);
+                }
+                return;
             }
         }
     }
@@ -950,7 +1025,7 @@ public:
     {
         switch(_token) {
         case _SC('='): case _SC('('): case TK_NEWSLOT: case TK_MODEQ: case TK_MULEQ:
-        case TK_DIVEQ: case TK_MINUSEQ: case TK_PLUSEQ:
+        case TK_DIVEQ: case TK_MINUSEQ: case TK_PLUSEQ: case TK_NULLCOALESCE_ASSIGN:
             return false;
         case _SC(':'):
             if(_allowtypeannotation) return false;
@@ -1648,6 +1723,7 @@ private:
     SQInteger _debugline;
     SQInteger _debugop;
     SQExpState   _es;
+    sqvector<SQInteger> _nullsafejumps;
     SQScope _scope;
     SQChar _compilererror[MAX_COMPILER_ERROR_LEN];
     jmp_buf _errorjmp;
