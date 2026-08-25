@@ -1086,6 +1086,41 @@ public:
 			 Lex();
 		 }
     }
+    void ParseAnnotations()
+    {
+        _fs->AddInstruction(_OP_NEWOBJ, _fs->PushTarget(), 0, NOT_TABLE);
+        while(_token == _SC('@')) {
+            Lex();
+            SQObject annotation = Expect(TK_IDENTIFIER);
+            Expect(_SC('('));
+            bool first = true;
+            while(_token != _SC(')')) {
+                SQObject key;
+                if(first) {
+                    key = annotation;
+                    first = false;
+                }
+                else {
+                    key = Expect(TK_IDENTIFIER);
+                    Expect(_SC(':'));
+                }
+                _fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetConstant(key));
+                Expression();
+                SQInteger value = _fs->PopTarget();
+                SQInteger keypos = _fs->PopTarget();
+                SQInteger attrs = _fs->TopTarget();
+                _fs->AddInstruction(_OP_NEWSLOT, 0xFF, attrs, keypos, value);
+                if(_token == _SC(',')) {
+                    Lex();
+                    if(_token == _SC(')')) Error(_SC("annotation argument expected"));
+                }
+                else if(_token != _SC(')')) {
+                    Error(_SC("expected ')' or ',' in annotation"));
+                }
+            }
+            Expect(_SC(')'));
+        }
+    }
     void ParseTableOrClass(SQInteger separator,SQInteger terminator)
     {
         SQInteger tpos = _fs->GetCurrentPos(),nkeys = 0;
@@ -1094,7 +1129,11 @@ public:
             bool isstatic = false;
             //check if is an attribute
             if(separator == ';') {
-                if(_token == TK_ATTR_OPEN) {
+                if(_token == _SC('@')) {
+                    ParseAnnotations();
+                    hasattrs = true;
+                }
+                else if(_token == TK_ATTR_OPEN) {
                     _fs->AddInstruction(_OP_NEWOBJ, _fs->PushTarget(),0,NOT_TABLE); Lex();
                     ParseTableOrClass(',',TK_ATTR_CLOSE);
                     hasattrs = true;

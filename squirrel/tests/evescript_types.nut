@@ -7,7 +7,10 @@ function choose(value: string?, fallback: string) -> string {
 }
 
 class Actor {
+    @editor("text")
     name: string = "Ada"
+    @editor("slider", min: 0, max: 100, step: 1)
+    @unit("hp")
     health: int = 10
 
     function damage(amount: int) -> bool {
@@ -23,6 +26,12 @@ assert(choose(null, "fallback") == "fallback")
 root_actor: Actor? <- Actor()
 assert(root_actor.name == "Ada")
 assert(root_actor.damage(3) == false)
+local actor_attrs = Actor.getattributes("health")
+assert(actor_attrs.editor == "slider")
+assert(actor_attrs.min == 0)
+assert(actor_attrs.max == 100)
+assert(actor_attrs.step == 1)
+assert(actor_attrs.unit == "hp")
 
 local missing: Actor? = null
 local fallback_calls = 0
