@@ -1994,7 +1994,7 @@ public:
             while(_token != _SC('}')) {
                 SQObject name = Expect(TK_IDENTIFIER);
                 SQObject local = name;
-                if(_token == TK_AS) {
+                if(_token == TK_IDENTIFIER && scstrcmp(_lex._svalue, _SC("as")) == 0) {
                     Lex();
                     local = Expect(TK_IDENTIFIER);
                 }
@@ -2008,14 +2008,18 @@ public:
         else if(_token == _SC('*')) {
             moduleNamespace = true;
             Lex();
-            Expect(TK_AS);
+            SQObject asKeyword = Expect(TK_IDENTIFIER);
+            if(scstrcmp(_stringval(asKeyword), _SC("as")) != 0)
+                Error(_SC("expected 'as' in namespace import"));
             locals.push_back(Expect(TK_IDENTIFIER));
         }
         else {
             Error(_SC("expected '{' or '*' after import"));
         }
 
-        Expect(TK_FROM);
+        SQObject fromKeyword = Expect(TK_IDENTIFIER);
+        if(scstrcmp(_stringval(fromKeyword), _SC("from")) != 0)
+            Error(_SC("expected 'from' after import list"));
         SQObject specifier = Expect(TK_STRING_LITERAL);
         if(_ss(_vm)->_moduledependencyhandler &&
             SQ_FAILED(_ss(_vm)->_moduledependencyhandler(_vm, _stringval(_sourcename),
