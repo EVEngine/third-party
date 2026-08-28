@@ -1,14 +1,21 @@
 local speed: float = 180.0
 local targets: Array<string> = ["one", "two"]
 local state: "idle" | "running" = "idle"
+local async_wrapper_calls = 0
 
 function __eve_async(body, environment) {
+    async_wrapper_calls++
     local coroutine = newthread(body.bindenv(environment))
     local value = coroutine.call()
     while (coroutine.getstatus() == "suspended")
         value = coroutine.wakeup(value)
     return value
 }
+
+function plain_add(a, b) { return a + b }
+assert(plain_add(2, 3) == 5)
+assert(typeof plain_add(2, 3) == "integer")
+assert(async_wrapper_calls == 0)
 
 async function async_sum(limit: int) -> int {
     local total = 0
@@ -38,6 +45,7 @@ assert(speed == 180.0)
 assert(targets.len() == 2)
 assert(state == "idle")
 assert(async_sum(4) == 6)
+assert(async_wrapper_calls == 1)
 assert(choose(null, "fallback") == "fallback")
 root_actor: Actor? <- Actor()
 assert(root_actor.name == "Ada")
@@ -134,6 +142,9 @@ local quarter_turn = angle_identity(90deg)
 assert(quarter_turn > 1.5707 && quarter_turn < 1.5709)
 local raw_milliseconds = 250ms
 assert(raw_milliseconds == 250.0)
+assert(typeof fade_seconds == "float")
+assert(typeof tile_pixels == "float")
+assert(typeof height_meters == "float")
 local typed_mode: "idle" | "run" | "jump" = "idle"
 function typed_mode_identity(mode: "idle" | "run" | "jump") { return mode }
 assert(typed_mode == "idle")

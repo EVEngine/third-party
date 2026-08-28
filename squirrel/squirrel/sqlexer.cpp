@@ -72,8 +72,6 @@ void SQLexer::Init(SQSharedState *ss, SQLEXREADFUNC rg, SQUserPointer up,Compile
     ADD_KEYWORD(persist, TK_PERSIST);
     ADD_KEYWORD(import, TK_IMPORT);
     ADD_KEYWORD(export, TK_EXPORT);
-    ADD_KEYWORD(from, TK_FROM);
-    ADD_KEYWORD(as, TK_AS);
     ADD_KEYWORD(async, TK_ASYNC);
     ADD_KEYWORD(await, TK_AWAIT);
 
