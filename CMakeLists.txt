@@ -242,6 +242,10 @@ set(BOX3D_DOCS OFF CACHE BOOL "" FORCE)
 set(BOX3D_VALIDATE OFF CACHE BOOL "" FORCE)
 add_subdirectory(box3d)
 
+# Jolt is packaged independently; selecting it in EVEngine is a separate backend concern.
+include(cmake/Jolt.cmake)
+eve_add_jolt()
+
 # install glm
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/glm/glm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
 

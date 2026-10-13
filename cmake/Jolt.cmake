@@ -1,0 +1,35 @@
+include_guard(GLOBAL)
+
+option(EVENGINE_BUILD_JOLT "Build and install the pinned Jolt rigid-body library" ON)
+
+# Keep upstream's generic option names local: they must not change sibling
+# dependencies' CRT, shared/static selection, compiler flags, or IPO policy.
+function(eve_add_jolt)
+    if(NOT EVENGINE_BUILD_JOLT)
+        return()
+    endif()
+    set(BUILD_SHARED_LIBS OFF)
+    set(OVERRIDE_CXX_FLAGS OFF)
+    set(INTERPROCEDURAL_OPTIMIZATION OFF)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+    set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF)
+    set(ENABLE_ALL_WARNINGS OFF)
+    set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF)
+    set(DOUBLE_PRECISION ON)
+    set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE OFF)
+    set(DEBUG_RENDERER_IN_DISTRIBUTION OFF)
+    set(PROFILER_IN_DEBUG_AND_RELEASE OFF)
+    set(PROFILER_IN_DISTRIBUTION OFF)
+    set(ENABLE_INSTALL ON)
+    # Portable x86 baseline (SSE2); do not require the build host's AVX/BMI ISA.
+    foreach(feature SSE4_1 SSE4_2 AVX AVX2 AVX512 LZCNT TZCNT F16C FMADD)
+        set(USE_${feature} OFF)
+    endforeach()
+    set(_jolt_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../jolt")
+    if(NOT EXISTS "${_jolt_source}/Build/CMakeLists.txt")
+        message(FATAL_ERROR "Jolt sources missing: run git submodule update --init --recursive")
+    endif()
+    # Subdirectory use builds only the library, never upstream tools/samples.
+    add_subdirectory("${_jolt_source}/Build" "${CMAKE_CURRENT_BINARY_DIR}/jolt")
+    install(FILES "${_jolt_source}/LICENSE" DESTINATION share/licenses/Jolt)
+endfunction()
