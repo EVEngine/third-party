@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
+include(cmake/apply_patches.cmake)
 project(EVEngineDeps)
+include(cmake/release_defaults.cmake)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

@@ -1,0 +1,131 @@
+name: Binary dependency release
+
+on:
+  pull_request:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable dependency tag to build
+        required: true
+        type: string
+
+concurrency:
+  group: dependency-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VULKAN_VERSION: "1.4.304.1"
+  ANDROID_NDK_VERSION: "27.3.13750724"
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2022, platform: win32, architecture: x86_64, configuration: Release}
+          - {runner: windows-2022, platform: win32, architecture: x86_64, configuration: Debug}
+          - {runner: ubuntu-24.04, platform: linux, architecture: x86_64, configuration: Release}
+          - {runner: macos-15, platform: macosx, architecture: arm64, configuration: Release}
+          - {runner: macos-15-intel, platform: macosx, architecture: x86_64, configuration: Release}
+          - {runner: ubuntu-24.04, platform: android, architecture: arm64, configuration: Release}
+          - {runner: macos-15, platform: ios, architecture: arm64, configuration: Release}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          submodules: recursive
+          fetch-depth: 0
+      - name: Verify tag and record source commit
+        if: github.event_name != 'pull_request'
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$TAG^{commit}")"
+      - name: Install Windows build tools
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@37effcfa045411f8bfbbda26df2fd1b3bf3436fa # v1
+        with:
+          vulkan_version: ${{ env.VULKAN_VERSION }}
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Android NDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: ndk;${{ env.ANDROID_NDK_VERSION }}
+      - name: Verify patch application, build and install dependencies
+        timeout-minutes: 120
+        env:
+          TARGET: ${{ matrix.platform }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          python3 tests/test_patches.py
+          bash scripts/build-release.sh
+      - name: Test installed native package
+        if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
+        env:
+          TARGET: ${{ matrix.platform }}
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: bash scripts/test-installed.sh
+      - name: Package zip
+        env:
+          TAG: ${{ github.event_name == 'pull_request' && 'v0.0.0' || inputs.tag || github.ref_name }}
+        run: python3 scripts/package.py "${{ matrix.platform }}" "$TAG" --architecture "${{ matrix.architecture }}" --configuration "${{ matrix.configuration }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deps-${{ matrix.platform }}-${{ matrix.architecture }}-${{ matrix.configuration }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: deps-*
+          path: artifacts
+          merge-multiple: true
+      - name: Check completeness and generate SHA256SUMS
+        run: |
+          set -euo pipefail
+          test "$(find artifacts -name '*.zip' | wc -l)" -eq 7
+          (cd artifacts && sha256sum *.zip > SHA256SUMS)
+      - name: Publish immutable dependency assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$REPO" >/dev/null || gh release create "$TAG" --repo "$REPO" --verify-tag --title "Third-party $TAG" --notes "Precompiled dependency installs. See README.md for platform, ABI and toolchain requirements."
+          gh release upload "$TAG" artifacts/*.zip artifacts/SHA256SUMS --repo "$REPO"

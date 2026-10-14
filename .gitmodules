@@ -11,3 +11,7 @@
 [submodule "jolt"]
 	path = jolt
 	url = https://github.com/jrouwe/JoltPhysics.git
+
+[submodule "VKBuilder"]
+	path = VKBuilder
+	url = https://github.com/sunxfancy/VKBuilder

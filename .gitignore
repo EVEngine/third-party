@@ -6,3 +6,4 @@
 # FreePats download leftovers (instruments/ is tracked in-repo)
 /timidity-freepats/deb-extract/
 /timidity-freepats/*.deb
+/artifacts/
