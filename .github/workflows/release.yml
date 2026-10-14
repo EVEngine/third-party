@@ -3,6 +3,7 @@ name: Binary dependency release
 on:
   pull_request:
   push:
+    branches: ["codex/release-*"]
     tags: ["v[0-9]*"]
   workflow_dispatch:
     inputs:
@@ -43,11 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
       - name: Verify tag and record source commit
-        if: github.event_name != 'pull_request'
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
@@ -93,7 +94,7 @@ jobs:
         run: bash scripts/test-installed.sh
       - name: Package zip
         env:
-          TAG: ${{ github.event_name == 'pull_request' && 'v0.0.0' || inputs.tag || github.ref_name }}
+          TAG: ${{ (github.event_name == 'pull_request' || startsWith(github.ref_name, 'codex/release-')) && 'v0.0.0' || inputs.tag || github.ref_name }}
         run: python3 scripts/package.py "${{ matrix.platform }}" "$TAG" --architecture "${{ matrix.architecture }}" --configuration "${{ matrix.configuration }}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -103,7 +104,7 @@ jobs:
           retention-days: 14
 
   publish:
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 20

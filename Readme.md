@@ -4,20 +4,30 @@ Dependency fixes live in `cmake/patches/`; `cmake/apply_patches.cmake` applies t
 idempotently before every source build. EVEngine does not maintain or inject these
 patches. The same source, ABI defaults and patches produce downloadable libraries.
 
+## Version policy
+
+Versions describe the whole dependency bundle independently of EVEngine.
+Start at v0.1.0. Patch releases fix compatible source/packaging issues; during 0.x,
+minor releases may upgrade dependencies or change ABI/toolchain/platform baselines.
+Use 1.0.0 once the package format and compatibility policy are stable. From 1.x,
+incompatible ABI or baseline changes require a major version. Never move a released
+tag or overwrite assets; update the version for changed binaries.
+
 ## Publish a version
 
 After reviewing and validating a dependency commit, create a new immutable tag:
 
 ```sh
-git tag v1.0.0 <reviewed-dependency-commit>
-git push origin v1.0.0
+git tag v0.1.0 <reviewed-dependency-commit>
+git push origin v0.1.0
 ```
 
 `.github/workflows/release.yml` builds Windows x64 Release/Debug, Linux x86_64,
 macOS arm64/x86_64, Android arm64-v8a and iOS arm64 device installs in parallel.
 It creates the matching GitHub Release and uploads seven `eve-third-party-*.zip`
 files and `SHA256SUMS` only after all builds and installed-package tests pass.
-Pull requests run the same build/package checks without publishing. Manual dispatch
+Pull requests and `codex/release-*` candidate branches run the same build/package
+checks without publishing. Manual dispatch
 accepts an existing tag and checks that checkout HEAD equals that tag's commit.
 Assets are never overwritten: changes require a new tag/version. A publishing retry
 with existing assets fails explicitly instead of replacing another binary version.
@@ -52,7 +62,7 @@ continue to use source builds; there is no binary-download failure fallback.
 git submodule update --init --recursive
 TARGET=linux ARCHITECTURE=x86_64 CONFIGURATION=Release bash scripts/build-release.sh
 TARGET=linux CONFIGURATION=Release bash scripts/test-installed.sh
-python3 scripts/package.py linux v1.0.0 --architecture x86_64
+python3 scripts/package.py linux v0.1.0 --architecture x86_64
 ```
 
 On Windows, run the script in Git Bash; `cmake/with-msvc.cmd` initializes MSVC.
