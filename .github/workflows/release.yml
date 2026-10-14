@@ -57,7 +57,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$TAG^{commit}")"
       - name: Install Windows build tools
         if: runner.os == 'Windows'
-        run: choco install ninja -y --no-progress
+        run: choco install ninja yasm -y --no-progress
       - name: Install macOS build tools
         if: runner.os == 'macOS'
         run: brew install ninja

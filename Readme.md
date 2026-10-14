@@ -66,6 +66,8 @@ python3 scripts/package.py linux v0.1.0 --architecture x86_64
 ```
 
 On Windows, run the script in Git Bash; `cmake/with-msvc.cmd` initializes MSVC.
+Install Ninja and yasm (`choco install ninja yasm`); mpg123's MSVC assembly
+sources require yasm, which is not preinstalled on the hosted Windows runner.
 Android additionally needs ANDROID_HOME and ANDROID_NDK_VERSION. Native builds
 require their OS development packages and Vulkan headers/SDK.
 
