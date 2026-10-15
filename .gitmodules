@@ -15,3 +15,9 @@
 [submodule "VKBuilder"]
 	path = VKBuilder
 	url = https://github.com/sunxfancy/VKBuilder
+[submodule "protobuf"]
+	path = protobuf
+	url = https://github.com/protocolbuffers/protobuf.git
+[submodule "abseil-cpp"]
+	path = abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
