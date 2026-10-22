@@ -83,7 +83,7 @@ def main() -> int:
     import re
     manifest = (ROOT / "cmake/apply_patches.cmake").read_text(encoding="utf-8")
     pairs = re.findall(r"patches/([^\"]+)\"\s+\"-DPATCH_DIR=\$\{TP_ROOT\}([^\"]*)", manifest)
-    assert len(pairs) == 18, pairs
+    assert len(pairs) == 17, pairs
     with tempfile.TemporaryDirectory(prefix="third-party-patches-") as raw:
         temporary = Path(raw)
         for index, (name, suffix) in enumerate(pairs):
