@@ -105,3 +105,40 @@ cmake -S tests/jolt -B build/jolt-absent -DEVENGINE_BUILD_JOLT=OFF
 
 The smoke test runs upstream's falling-body example both in-tree and through the
 installed package; configure also checks parent-option isolation and ABI exports.
+
+## ARM64 原生构建 / Native ARM64 builds
+
+先运行 `git submodule update --init --recursive`。需要 CMake >= 3.21、Ninja
+及原生 ARM64 C/C++ 工具链。Windows 安装 Visual Studio ARM64 C++ 工具与
+Windows SDK；Linux 安装 aarch64 GCC/G++ 和依赖库所需的系统开发包。
+
+Windows ARM64（PowerShell / cmd）：
+
+```powershell
+cmake\with-msvc.cmd --arm64 cmake --preset windows-arm64-release
+cmake\with-msvc.cmd --arm64 cmake --build --preset windows-arm64-release
+```
+
+Linux ARM64：
+
+```sh
+cmake --preset linux-arm64-release
+cmake --build --preset linux-arm64-release
+```
+
+Debug 将命令中的 `release` 换为 `debug`。四种配置分别使用
+`build/<preset>` 构建目录，安装到 `build/install/<preset>`，互不混用，
+也不会覆盖原有 x64 库。构建 preset 默认执行 `install`，并发为 4；
+可用 `cmake --build --preset <preset> -j 8` 覆盖。
+
+这些配置检查宿主、目标和编译器的 ARM64 架构，不用于交叉编译。
+直接配置也可传 `-DEVENGINE_NATIVE_ARM64=ON`，并指定独立的 `-B` 与
+`-DCMAKE_INSTALL_PREFIX`。未开启此选项时保留原有构建行为。
+
+The four presets build and install native Windows/Linux ARM64 dependencies.
+Use the ARM64 MSVC wrapper for both Windows configure and build commands;
+Linux uses the native GCC/G++ environment. Replace `release` with `debug` for
+Debug libraries. Each preset has separate build and install directories under
+`build/`. The native architecture check rejects x64 compilers and cross builds.
+EVEngine's Makefile manages its own architecture-specific dependency directories;
+these presets are the standalone entry points for this repository.
