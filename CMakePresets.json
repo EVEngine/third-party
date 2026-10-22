@@ -1,0 +1,108 @@
+{
+  "buildPresets": [
+    {
+      "jobs": 4,
+      "name": "windows-arm64-release",
+      "targets": [
+        "install"
+      ],
+      "configurePreset": "windows-arm64-release"
+    },
+    {
+      "jobs": 4,
+      "name": "windows-arm64-debug",
+      "targets": [
+        "install"
+      ],
+      "configurePreset": "windows-arm64-debug"
+    },
+    {
+      "jobs": 4,
+      "name": "linux-arm64-release",
+      "targets": [
+        "install"
+      ],
+      "configurePreset": "linux-arm64-release"
+    },
+    {
+      "jobs": 4,
+      "name": "linux-arm64-debug",
+      "targets": [
+        "install"
+      ],
+      "configurePreset": "linux-arm64-debug"
+    }
+  ],
+  "cmakeMinimumRequired": {
+    "patch": 0,
+    "minor": 21,
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "condition": {
+        "type": "equals",
+        "rhs": "Windows",
+        "lhs": "${hostSystemName}"
+      },
+      "generator": "Ninja",
+      "name": "windows-arm64-release",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install/windows-arm64-release",
+        "EVENGINE_NATIVE_ARM64": "ON",
+        "ASSIMP_BUILD_USE_CCACHE": "OFF",
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "binaryDir": "${sourceDir}/build/windows-arm64-release"
+    },
+    {
+      "condition": {
+        "type": "equals",
+        "rhs": "Windows",
+        "lhs": "${hostSystemName}"
+      },
+      "generator": "Ninja",
+      "name": "windows-arm64-debug",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install/windows-arm64-debug",
+        "EVENGINE_NATIVE_ARM64": "ON",
+        "ASSIMP_BUILD_USE_CCACHE": "OFF",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "binaryDir": "${sourceDir}/build/windows-arm64-debug"
+    },
+    {
+      "condition": {
+        "type": "equals",
+        "rhs": "Linux",
+        "lhs": "${hostSystemName}"
+      },
+      "generator": "Ninja",
+      "name": "linux-arm64-release",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install/linux-arm64-release",
+        "EVENGINE_NATIVE_ARM64": "ON",
+        "ASSIMP_BUILD_USE_CCACHE": "OFF",
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "binaryDir": "${sourceDir}/build/linux-arm64-release"
+    },
+    {
+      "condition": {
+        "type": "equals",
+        "rhs": "Linux",
+        "lhs": "${hostSystemName}"
+      },
+      "generator": "Ninja",
+      "name": "linux-arm64-debug",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install/linux-arm64-debug",
+        "EVENGINE_NATIVE_ARM64": "ON",
+        "ASSIMP_BUILD_USE_CCACHE": "OFF",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "binaryDir": "${sourceDir}/build/linux-arm64-debug"
+    }
+  ],
+  "version": 3
+}
