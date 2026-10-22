@@ -22,9 +22,9 @@ git tag v0.1.0 <reviewed-dependency-commit>
 git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` builds Windows x64 Release/Debug, Linux x86_64,
+`.github/workflows/release.yml` builds Windows x64/ARM64 Release/Debug, Linux x86_64/ARM64,
 macOS arm64/x86_64, Android arm64-v8a and iOS arm64 device installs in parallel.
-It creates the matching GitHub Release and uploads seven `eve-third-party-*.zip`
+It creates the matching GitHub Release and uploads ten `eve-third-party-*.zip`
 files and `SHA256SUMS` only after all builds and installed-package tests pass.
 Pull requests and `codex/release-*` candidate branches run the same build/package
 checks without publishing. Manual dispatch
@@ -47,7 +47,8 @@ publishing a directory; an incompatible existing prefix is never overwritten.
 
 ## Binary compatibility
 
-Windows uses MSVC on windows-2022, x64, /MD or /MDd. Linux uses Ubuntu 24.04/GCC.
+Windows uses MSVC on windows-2022 (x64) or windows-11-arm (ARM64), /MD or /MDd.
+Linux uses Ubuntu 24.04/GCC on native x86_64 or ARM64 runners.
 macOS uses macos-15 (arm64) and macos-15-intel (x86_64), deployment target 13.0.
 Android uses NDK 27.3.13750724, API 24, arm64-v8a, c++_shared. iOS uses arm64 device
 SDK, deployment target 13.0. Native packages include static and shared SDL/Box2D/
@@ -68,6 +69,8 @@ python3 scripts/package.py linux v0.1.0 --architecture x86_64
 On Windows, run the script in Git Bash; `cmake/with-msvc.cmd` initializes MSVC.
 Install Ninja and yasm (`choco install ninja yasm`); mpg123's MSVC assembly
 sources require yasm, which is not preinstalled on the hosted Windows runner.
+ARM64 Windows builds and installed-package tests select `vcvarsarm64.bat` through
+`cmake/with-msvc.cmd --arm64`; set `ARCHITECTURE=arm64` for both scripts.
 Android additionally needs ANDROID_HOME and ANDROID_NDK_VERSION. Native builds
 require their OS development packages and Vulkan headers/SDK.
 

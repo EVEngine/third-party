@@ -8,7 +8,12 @@ args=(-G Ninja -S . -B build/deps "-DCMAKE_BUILD_TYPE=$configuration"
   "-DCMAKE_INSTALL_PREFIX=$PWD/build/install" -DEVENGINE_DEPS_RELEASE=ON
   -DBUILD_TESTING=OFF -DEVENGINE_BUILD_JOLT=ON)
 case "$target" in
-  win32) cmake_command=(cmake/with-msvc.cmd cmake) ;;
+  win32)
+    if [ "$architecture" = arm64 ]; then
+      cmake_command=(cmake/with-msvc.cmd --arm64 cmake)
+    else
+      cmake_command=(cmake/with-msvc.cmd cmake)
+    fi ;;
   linux) args+=(-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++) ;;
   macosx) args+=("-DCMAKE_OSX_ARCHITECTURES=$architecture" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0) ;;
   android)
