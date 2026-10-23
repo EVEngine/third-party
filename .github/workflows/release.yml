@@ -36,7 +36,10 @@ jobs:
         include:
           - {runner: windows-2022, platform: win32, architecture: x86_64, configuration: Release}
           - {runner: windows-2022, platform: win32, architecture: x86_64, configuration: Debug}
+          - {runner: windows-11-arm, platform: win32, architecture: arm64, configuration: Release}
+          - {runner: windows-11-arm, platform: win32, architecture: arm64, configuration: Debug}
           - {runner: ubuntu-24.04, platform: linux, architecture: x86_64, configuration: Release}
+          - {runner: ubuntu-24.04-arm, platform: linux, architecture: arm64, configuration: Release}
           - {runner: macos-15, platform: macosx, architecture: arm64, configuration: Release}
           - {runner: macos-15-intel, platform: macosx, architecture: x86_64, configuration: Release}
           - {runner: ubuntu-24.04, platform: android, architecture: arm64, configuration: Release}
@@ -67,11 +70,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
       - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@37effcfa045411f8bfbbda26df2fd1b3bf3436fa # v1
+        if: runner.os != 'Linux' || matrix.architecture != 'arm64'
+        uses: jakoch/install-vulkan-sdk-action@d17de7e2f5e50efb5d2123efed18497d3c58c533 # v1
         with:
           vulkan_version: ${{ env.VULKAN_VERSION }}
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install native Linux ARM64 Vulkan headers and tools
+        if: runner.os == 'Linux' && matrix.architecture == 'arm64'
+        run: sudo apt-get install -y --no-install-recommends libvulkan-dev glslc glslang-tools
       - name: Setup Android NDK
         if: matrix.platform == 'android'
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
@@ -90,6 +97,7 @@ jobs:
         if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
         env:
           TARGET: ${{ matrix.platform }}
+          ARCHITECTURE: ${{ matrix.architecture }}
           CONFIGURATION: ${{ matrix.configuration }}
         run: bash scripts/test-installed.sh
       - name: Package zip
@@ -119,7 +127,7 @@ jobs:
       - name: Check completeness and generate SHA256SUMS
         run: |
           set -euo pipefail
-          test "$(find artifacts -name '*.zip' | wc -l)" -eq 7
+          test "$(find artifacts -name '*.zip' | wc -l)" -eq 10
           (cd artifacts && sha256sum *.zip > SHA256SUMS)
       - name: Publish immutable dependency assets
         env:

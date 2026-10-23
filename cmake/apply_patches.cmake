@@ -67,12 +67,6 @@ execute_process(COMMAND "${CMAKE_COMMAND}"
     -P "${CMAKE_CURRENT_LIST_DIR}/apply_patch.cmake"
     COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${CMAKE_COMMAND}"
-    "-DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/mpg123-apple-fpu-detection.patch"
-    "-DPATCH_DIR=${TP_ROOT}/medialoader"
-    -DPATCH_NORMALIZE_CRLF=ON
-    -P "${CMAKE_CURRENT_LIST_DIR}/apply_patch.cmake"
-    COMMAND_ERROR_IS_FATAL ANY)
-execute_process(COMMAND "${CMAKE_COMMAND}"
     "-DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/box3d-dynamic-crt.patch"
     "-DPATCH_DIR=${TP_ROOT}/box3d"
     -DPATCH_NORMALIZE_CRLF=ON
