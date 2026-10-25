@@ -55,12 +55,6 @@ execute_process(COMMAND "${CMAKE_COMMAND}"
     -P "${CMAKE_CURRENT_LIST_DIR}/apply_patch.cmake"
     COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${CMAKE_COMMAND}"
-    "-DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/simplesquirrel-stable-type-hash.patch"
-    "-DPATCH_DIR=${TP_ROOT}"
-    -DPATCH_NORMALIZE_CRLF=ON
-    -P "${CMAKE_CURRENT_LIST_DIR}/apply_patch.cmake"
-    COMMAND_ERROR_IS_FATAL ANY)
-execute_process(COMMAND "${CMAKE_COMMAND}"
     "-DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/squirrel-nested-call-signature-lifetime.patch"
     "-DPATCH_DIR=${TP_ROOT}"
     -DPATCH_NORMALIZE_CRLF=ON

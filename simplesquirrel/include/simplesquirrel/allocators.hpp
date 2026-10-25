@@ -65,7 +65,7 @@ namespace ssq {
             sq_setreleasehook(vm, -2 -off, &detail::classDestructor<T>);
 
             sq_getclass(vm, -2 -off);
-            sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(typeid(T*).hash_code()));
+            sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(stableTypeHash<T*>()));
             sq_pop(vm, 1); // Pop class
             return nparams;
         }
@@ -82,7 +82,7 @@ namespace ssq {
             sq_setinstanceup(vm, -2 -off, p);
 
             sq_getclass(vm, -2 -off);
-            sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(typeid(T*).hash_code()));
+            sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(stableTypeHash<T*>()));
             sq_pop(vm, 1); // Pop class
             return nparams;
         }
