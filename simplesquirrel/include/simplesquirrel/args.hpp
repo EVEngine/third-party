@@ -4,7 +4,10 @@
 
 #include "exceptions.hpp"
 #include <squirrel.h>
+#include <functional>
 #include <iostream>
+#include <string>
+#include <type_traits>
 #include <typeinfo>
 #include <vector>
 
@@ -16,6 +19,22 @@ namespace ssq {
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
     namespace detail {
+        template <typename T>
+        auto nativeTypeGeneration(int) -> decltype(reinterpret_cast<size_t>(T::nativeModuleFactory())) {
+            return reinterpret_cast<size_t>(T::nativeModuleFactory());
+        }
+
+        template <typename T>
+        size_t nativeTypeGeneration(...) {
+            return 0;
+        }
+
+        template <typename T>
+        inline size_t stableTypeHash() {
+            static const size_t name = std::hash<std::string>{}(typeid(T).name());
+            return name ^ nativeTypeGeneration<typename std::remove_pointer<T>::type>(0);
+        }
+
         SSQ_API void addClassObj(HSQUIRRELVM vm, size_t hashCode, const HSQOBJECT& obj);
         SSQ_API const HSQOBJECT& getClassObj(HSQUIRRELVM vm, size_t hashCode);
 
@@ -50,7 +69,7 @@ namespace ssq {
             if(type == OT_USERDATA) {
                 sq_getuserdata(vm, index, &ptr, &typetag);
 
-                if(reinterpret_cast<size_t>(typetag) != typeid(T).hash_code()) {
+                if(reinterpret_cast<size_t>(typetag) != stableTypeHash<T>()) {
                     throw TypeException("bad cast", typeid(T).name(), "UNKNOWN");
                 }
 
@@ -61,7 +80,7 @@ namespace ssq {
                 sq_getinstanceup(vm, index, &ptr, &typetag);
                 sq_gettypetag(vm, index, &typetag);
 
-                if(reinterpret_cast<size_t>(typetag) != typeid(T*).hash_code()) {
+                if(reinterpret_cast<size_t>(typetag) != stableTypeHash<T*>()) {
                     throw TypeException("bad cast", typeid(T).name(), "UNKNOWN");
                 }
 
@@ -86,11 +105,9 @@ namespace ssq {
             else {
                 if (type != OT_INSTANCE) throw TypeException("bad cast", typeToStr(Type(OT_INSTANCE)), typeToStr(Type(type)));
                 SQUserPointer val;
-                /*sq_gettypetag(vm, index, &val);
-                if (reinterpret_cast<size_t>(val) != typeid(T).hash_code()) {
-                    throw TypeException("bad cast", typeid(T).name(), "UNKNOWN");
-                }*/
-                if (SQ_FAILED(sq_getinstanceup(vm, index, &val, nullptr))) {
+                const auto generation = nativeTypeGeneration<typename std::remove_pointer<T>::type>(0);
+                const auto expected = generation ? reinterpret_cast<SQUserPointer>(stableTypeHash<T>()) : nullptr;
+                if (SQ_FAILED(sq_getinstanceup(vm, index, &val, expected))) {
                     throw TypeException("Could not get instance from squirrel stack");
                 }
                 return reinterpret_cast<T>(val);
@@ -265,7 +282,7 @@ namespace ssq {
 
         template<typename T>
         inline void pushByCopy(HSQUIRRELVM vm, const T& value) {
-            static const auto hashCode = typeid(T*).hash_code();
+            const auto hashCode = stableTypeHash<T*>();
             try {
                 sq_pushobject(vm, getClassObj(vm, hashCode));
                 sq_createinstance(vm, -1);
@@ -279,7 +296,7 @@ namespace ssq {
                 T** data = reinterpret_cast<T**>(sq_newuserdata(vm, sizeof(T*)));
                 *data = new T(value);
                 sq_setreleasehook(vm, -1, classPtrDestructor<T>);
-                sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(typeid(T).hash_code()));
+                sq_settypetag(vm, -1, reinterpret_cast<SQUserPointer>(stableTypeHash<T>()));
             }
         }
 
@@ -436,7 +453,7 @@ namespace ssq {
 
         template<typename T>
         inline void pushByPtr(HSQUIRRELVM vm, T* value) {
-            static const auto hashCode = typeid(T*).hash_code();
+            const auto hashCode = stableTypeHash<T*>();
             if (value == nullptr) {
                 sq_pushnull(vm);
             }

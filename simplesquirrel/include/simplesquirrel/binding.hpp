@@ -92,7 +92,7 @@ namespace ssq {
 
         template<typename T, typename... Args>
         static Object addClass(HSQUIRRELVM vm, const char* name, const std::function<T*(Args...)>& allocator, bool release = true) {
-            static const auto hashCode = typeid(T*).hash_code();
+            const auto hashCode = stableTypeHash<T*>();
             static const std::size_t nparams = sizeof...(Args);
 
             Object clsObj(vm);
@@ -130,7 +130,7 @@ namespace ssq {
 
         template<typename T>
         static Object addAbstractClass(HSQUIRRELVM vm, const char* name) {
-            static const auto hashCode = typeid(T*).hash_code();
+            const auto hashCode = stableTypeHash<T*>();
             Object clsObj(vm);
 
             sq_pushstring(vm, name, strlen(name));
