@@ -4,7 +4,8 @@ include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
 # Some required properties
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Select build type")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 option(BUILD_TESTS "Build tests" ON)
@@ -44,6 +45,8 @@ link_directories(${CMAKE_LIBRARY_PATH})
 # Add our library
 add_library(${PROJECT_NAME}_static STATIC ${SOURCES} ${HEADERS})
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+target_compile_features(${PROJECT_NAME}_static PUBLIC cxx_std_20)
 if(NOT DEFINED SQUIRREL_LIBRARIES AND NOT DEFINED SQSTDLIB_LIBRARIESRARIES)
   add_dependencies(${PROJECT_NAME} SQUIRREL)
   add_dependencies(${PROJECT_NAME}_static SQUIRREL)
@@ -56,6 +59,9 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY FOLDER "simplesquirrel/lib")
 set_property(TARGET ${PROJECT_NAME}_static PROPERTY FOLDER "simplesquirrel/lib")
 
 # Install
+if(MSVC)
+  target_compile_definitions(${PROJECT_NAME}_static PRIVATE SSQ_EXPORTS=1 SSQ_DLL=1)
+endif()
 if(BUILD_INSTALL)
   if(MSVC)
       INSTALL(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION bin OPTIONAL)

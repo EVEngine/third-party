@@ -282,6 +282,34 @@ file(GLOB_RECURSE box2d_src ${CMAKE_CURRENT_SOURCE_DIR}/Box2D/**/*.cpp)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 add_library(Box2D ${box2d_src})
 
+# EVEngine: dynamic twin for the engine's shared link-group route. The engine
+# wraps rigid bodies from two link groups (EVWorld and the EVDomains physics
+# satellites) and Box2D keeps its contact registry (b2Contact's s_registers /
+# s_initialized) in file scope, so a copy per group means a contact created
+# through one group is unknown to the other (Box2D assertion
+# s_initialized == true, spec section 7.25). This desktop-only twin is built
+# next to the archive, which stays the canonical target, so the OBJECT /
+# release SDK route always links a static Box2D and remains one self-contained
+# executable no matter which configuration built this tree last. Box2D
+# carries no export macros of its own, so the twin relies on
+# CMake's all-symbols .def generation for functions and on B2_DATA_API
+# (Box2D/Common/b2Settings.h) for the two public data symbols the .def cannot
+# cover. DEFINE_SYMBOL reproduces the <target>_EXPORTS macro that annotation
+# keys on, and the configuration postfixes are cleared so the import library
+# has one predictable name.
+if(NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
+   AND NOT EMSCRIPTEN)
+  add_library(Box2D_dynamic SHARED ${box2d_src})
+  set_target_properties(Box2D_dynamic PROPERTIES
+    DEFINE_SYMBOL Box2D_EXPORTS
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    OUTPUT_NAME Box2D-dynamic
+    DEBUG_POSTFIX ""
+    RELEASE_POSTFIX ""
+    MINSIZEREL_POSTFIX ""
+    RELWITHDEBINFO_POSTFIX "")
+endif()
+
 # for Physfs
 file(GLOB_RECURSE physfs_header ${CMAKE_CURRENT_SOURCE_DIR}/physfs/*.h )
 file(GLOB_RECURSE physfs_src ${CMAKE_CURRENT_SOURCE_DIR}/physfs/*.c ${CMAKE_CURRENT_SOURCE_DIR}/physfs/*.cpp)
@@ -362,6 +390,17 @@ endif()
 
 install(TARGETS physfs Box2D xxHash lz4 imgui ${_eve_backward_target}
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development)
+
+if(NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
+   AND NOT EMSCRIPTEN)
+  # EVEngine: the dynamic twin's import library stays with the other archives,
+  # while its runtime image goes to bin/ like every other shared dependency (the
+  # engine deploys and searches bin/ beside the executables).
+  install(TARGETS Box2D_dynamic
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/ COMPONENT Development
+          RUNTIME DESTINATION bin COMPONENT Runtime)
+endif()
 
 if(NOT EVENGINE_WEBGPU_TRIM)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/zlib/ ${CMAKE_CURRENT_BINARY_DIR}/zlib/)

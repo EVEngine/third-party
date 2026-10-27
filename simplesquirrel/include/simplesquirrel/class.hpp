@@ -6,6 +6,7 @@
 #include "function.hpp"
 #include "array.hpp"
 #include "binding.hpp"
+#include "direct_member.hpp"
 
 namespace ssq {
     /**
@@ -88,8 +89,12 @@ namespace ssq {
         */
         template <typename Return, typename Object, typename... Args>
         Function addFunc(const char* name, Return(Object::*memfunc)(Args...), bool isStatic = false) {
-            auto func = std::function<Return(Object*, Args...)>(std::mem_fn(memfunc));
-            return addFunc(name, func, isStatic);
+            if (vm == nullptr) throw RuntimeException("VM is not initialised");
+            Function ret(vm);
+            sq_pushobject(vm, obj);
+            detail::DirectMember<decltype(memfunc)>::bind(vm, name, memfunc, isStatic);
+            sq_pop(vm, 1);
+            return ret;
         }
         /**
         * @brief Adds a new function type to this class
@@ -100,8 +105,12 @@ namespace ssq {
         */
         template <typename Return, typename Object, typename... Args>
         Function addFunc(const char* name, Return(Object::*memfunc)(Args...) const, bool isStatic = false) {
-            auto func = std::function<Return(Object*, Args...)>(std::mem_fn(memfunc));
-            return addFunc(name, func, isStatic);
+            if (vm == nullptr) throw RuntimeException("VM is not initialised");
+            Function ret(vm);
+            sq_pushobject(vm, obj);
+            detail::DirectMember<decltype(memfunc)>::bind(vm, name, memfunc, isStatic);
+            sq_pop(vm, 1);
+            return ret;
         }
         /**
         * @brief Adds a new function type to this class
@@ -113,7 +122,16 @@ namespace ssq {
         */
         template<typename F>
         Function addFunc(const char* name, const F& lambda, bool isStatic = false) {
-            return addFunc(name, detail::make_function(lambda), isStatic);
+            if constexpr (detail::directFunctionCompatible<F>) {
+                if (vm == nullptr) throw RuntimeException("VM is not initialised");
+                Function ret(vm);
+                sq_pushobject(vm, obj);
+                detail::DirectFunction<decltype(+lambda), true>::bind(vm, name, +lambda, isStatic);
+                sq_pop(vm, 1);
+                return ret;
+            } else {
+                return addFunc(name, detail::make_function(lambda), isStatic);
+            }
         }
         template<typename T, typename V>
         void addVar(const std::string& name, V T::* ptr, bool isStatic = false) {

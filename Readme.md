@@ -1,8 +1,14 @@
 # EVEngine third-party independent releases
 
-Dependency fixes live in `cmake/patches/`; `cmake/apply_patches.cmake` applies them
-idempotently before every source build. EVEngine does not maintain or inject these
-patches. The same source, ABI defaults and patches produce downloadable libraries.
+Aggregate-owned dependency fixes are committed directly to their source files,
+including SimpleSquirrel direct bindings (C++20). VKBuilder fixes are pinned in its
+source submodule. Only external submodule fixes remain in `cmake/patches/`, applied
+idempotently by `cmake/apply_patches.cmake`. EVEngine does not inject dependency
+patches or generate replacement dependency implementations. Source and release
+builds consume these same canonical headers and ABI defaults.
+
+Native binding regression: `cmake -S tests/simplesquirrel -B build/bindings`,
+then `cmake --build build/bindings` and `ctest --test-dir build/bindings --output-on-failure`.
 
 ## Version policy
 
@@ -145,3 +151,7 @@ Debug libraries. Each preset has separate build and install directories under
 `build/`. The native architecture check rejects x64 compilers and cross builds.
 EVEngine's Makefile manages its own architecture-specific dependency directories;
 these presets are the standalone entry points for this repository.
+
+`cmake/engine_headers.cmake` owns Apple Vulkan-Hpp package ABI integration.
+ECS and zeroerr remain independently versioned engine submodules; they are not
+part of this aggregate release. Their native source owns their engine fixes.

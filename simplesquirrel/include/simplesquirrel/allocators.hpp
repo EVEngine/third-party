@@ -5,6 +5,7 @@
 #include "object.hpp"
 #include "args.hpp"
 #include <functional>
+#include <exception>
 
 namespace ssq {
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
@@ -49,6 +50,7 @@ namespace ssq {
 
         template<class T, class... Args, size_t... Is>
         static T* callConstructor(HSQUIRRELVM vm, FuncPtr<T*(Args...)>* funcPtr, index_list<Is...>) {
+            static_cast<void>(vm);
             return funcPtr->ptr->operator()(detail::pop<Args>(vm, Is + 2)...);
         }
 
@@ -60,7 +62,15 @@ namespace ssq {
             FuncPtr<T*(Args...)>* funcPtr;
             sq_getuserdata(vm, -1, reinterpret_cast<void**>(&funcPtr), nullptr);
 
-            T* p = callConstructor<T, Args...>(vm, funcPtr, index_range<0, sizeof...(Args)>());
+            T* p = nullptr;
+            try {
+                p = callConstructor<T, Args...>(vm, funcPtr, index_range<0, sizeof...(Args)>());
+            } catch (const std::exception& e) {
+                const char* msg = e.what();
+                return sq_throwerror(vm, msg ? msg : "exception in class constructor");
+            } catch (...) {
+                return sq_throwerror(vm, "unknown exception in class constructor");
+            }
             sq_setinstanceup(vm, -2 -off, p);
             sq_setreleasehook(vm, -2 -off, &detail::classDestructor<T>);
 
@@ -78,7 +88,15 @@ namespace ssq {
             FuncPtr<T*(Args...)>* funcPtr;
             sq_getuserdata(vm, -1, reinterpret_cast<void**>(&funcPtr), nullptr);
 
-            T* p = callConstructor<T, Args...>(vm, funcPtr, index_range<0, sizeof...(Args)>());
+            T* p = nullptr;
+            try {
+                p = callConstructor<T, Args...>(vm, funcPtr, index_range<0, sizeof...(Args)>());
+            } catch (const std::exception& e) {
+                const char* msg = e.what();
+                return sq_throwerror(vm, msg ? msg : "exception in class constructor");
+            } catch (...) {
+                return sq_throwerror(vm, "unknown exception in class constructor");
+            }
             sq_setinstanceup(vm, -2 -off, p);
 
             sq_getclass(vm, -2 -off);
