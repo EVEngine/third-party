@@ -110,7 +110,15 @@ namespace ssq {
         */
         template<typename F>
         Function addFunc(const char* name, const F& lambda) {
-            return addFunc(name, detail::make_function(lambda));
+            if constexpr (detail::directFunctionCompatible<F>) {
+                Function ret(vm);
+                sq_pushobject(vm, obj);
+                detail::DirectFunction<decltype(+lambda), false>::bind(vm, name, +lambda);
+                sq_pop(vm, 1);
+                return ret;
+            } else {
+                return addFunc(name, detail::make_function(lambda));
+            }
         }
         /**
          * @brief Adds a new key-value pair to this table
