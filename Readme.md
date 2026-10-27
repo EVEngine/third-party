@@ -151,3 +151,8 @@ Debug libraries. Each preset has separate build and install directories under
 `build/`. The native architecture check rejects x64 compilers and cross builds.
 EVEngine's Makefile manages its own architecture-specific dependency directories;
 these presets are the standalone entry points for this repository.
+
+ECS and zeroerr are pinned here as source submodules. ECS owns the compiled
+container declarations and lifecycle fixes directly; zeroerr owns its fixture
+identity fix. Engine consumers no longer apply ECS patches or replacement headers.
+`cmake/engine_headers.cmake` owns Apple Vulkan-Hpp package ABI integration.
