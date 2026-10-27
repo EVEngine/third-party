@@ -68,7 +68,7 @@ namespace ssq {
         }
     }
 
-    Object::Object(Object&& other) NOEXCEPT :vm(nullptr) {
+    Object::Object(Object&& other) NOEXCEPT :vm(nullptr), weak(false) {
         vm = nullptr;
         sq_resetobject(&obj);
         swap(other);

@@ -2586,12 +2586,15 @@ if(SDL_SHARED)
       OUTPUT_NAME "SDL2")
   endif()
   if(MSVC AND NOT LIBC)
-    # Don't try to link with the default set of libraries.
-    if(NOT WINDOWS_STORE)
-      set_target_properties(SDL2 PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
-      set_target_properties(SDL2 PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
+    # EVEngine: the shared library is loaded by executables and DLLs that link
+    # the dynamic CRT, so it has to do the same. /NODEFAULTLIB would leave it
+    # without ucrt/vcruntime and src/SDL.c's CRT-less _DllMainCRTStartup stub
+    # would become its entry point. Defining SDL_STATIC_LIB (read only by
+    # src/SDL.c, so the public SDL.h view is unchanged) drops the stub, and the
+    # default libraries stay in the link.
+    if(WIN32)
+      target_compile_definitions(SDL2 PRIVATE SDL_STATIC_LIB)
     endif()
-    set_target_properties(SDL2 PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
   endif()
   set(_INSTALL_LIBS "SDL2" ${_INSTALL_LIBS})
   target_link_libraries(SDL2 PRIVATE ${EXTRA_LIBS} ${EXTRA_LDFLAGS})
@@ -2637,10 +2640,16 @@ if(SDL_STATIC)
     # clobbered, when the suffix is realized via subsequent rename.
   endif()
   set_target_properties(SDL2-static PROPERTIES POSITION_INDEPENDENT_CODE ${SDL_STATIC_PIC})
-  if(MSVC AND NOT LIBC)
-    set_target_properties(SDL2-static PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
-    set_target_properties(SDL2-static PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
-    set_target_properties(SDL2-static PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
+  if(WIN32)
+    # EVEngine: this static library is linked into DLLs we build ourselves.
+    # src/SDL.c defines a CRT-less _DllMainCRTStartup stub unless SDL_STATIC_LIB
+    # is set, and the linker then takes that stub as the entry point of our DLL
+    # instead of pulling the CRT's own startup object, so ucrt/vcruntime are
+    # never searched (every DLL link fails with LNK2019 __acrt_initialize in
+    # MSVCRTD.lib(utility.obj)). Upstream fixed the same configuration by
+    # dropping /NODEFAULTLIB here (SDL bug 4034, commit 26a56a4); this pinned
+    # 2.0.16 needs the guard macro too.
+    target_compile_definitions(SDL2-static PRIVATE SDL_STATIC_LIB)
   endif()
   # TODO: Win32 platforms keep the same suffix .lib for import and static
   # libraries - do we need to consider this?
@@ -2736,6 +2745,28 @@ if(NOT (WINDOWS OR CYGWIN OR MINGW))
   install(PROGRAMS ${SDL2_BINARY_DIR}/sdl2-config DESTINATION "${CMAKE_INSTALL_BINDIR}")
   # TODO: what about the .spec file? Is it only needed for RPM creation?
   install(FILES "${SDL2_SOURCE_DIR}/sdl2.m4" DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/aclocal")
+endif()
+
+# EVEngine: this pinned SDL 2.0.16 loads Wayland dynamically (WAYLAND_SHARED is
+# ON by default), so it never links libwayland-client. Wayland headers from 1.20
+# on route wl_proxy_marshal() through wl_proxy_marshal_flags(), which leaves
+# direct references in the objects SDL compiles, and building SDL *shared* then
+# fails with "undefined reference to wl_proxy_marshal_flags". The static archive
+# never hits it, because the engine links the Wayland libraries itself (see
+# cmake/system_libraries.cmake). Linking the library here is harmless while the
+# dynamic loading path stays in use.
+#
+# Both the platform guard and the find_library() check are load-bearing: SDL also
+# builds a shared libSDL2.so for Android, where VIDEO_WAYLAND/WAYLAND_SHARED are
+# ON (Android is UNIX) but no wayland-client exists, so a flag-only guard breaks
+# that build with "ld.lld: error: unable to find library -lwayland-client".
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID
+   AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android"
+   AND VIDEO_WAYLAND AND WAYLAND_SHARED)
+  find_library(EVE_WAYLAND_CLIENT_LIBRARY wayland-client)
+  if(EVE_WAYLAND_CLIENT_LIBRARY)
+    target_link_libraries(SDL2 PRIVATE ${EVE_WAYLAND_CLIENT_LIBRARY})
+  endif()
 endif()
 
 ##### Uninstall target #####

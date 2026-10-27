@@ -93,6 +93,12 @@ jobs:
         run: |
           python3 tests/test_patches.py
           bash scripts/build-release.sh
+      - name: Test canonical SimpleSquirrel bindings
+        if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
+        run: |
+          cmake -S tests/simplesquirrel -B build/native-bindings -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native-bindings --config Release --parallel 4
+          ctest --test-dir build/native-bindings -C Release --output-on-failure
       - name: Test installed native package
         if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
         env:

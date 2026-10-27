@@ -39,6 +39,10 @@ if(NOT DISABLE_STATIC)
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
     )
+  if(MSVC)
+    target_compile_definitions(sqstdlib_static PRIVATE
+      "SQUIRREL_API=__declspec(dllexport)")
+  endif()
 endif()
 
 if(LONG_OUTPUT_NAMES)

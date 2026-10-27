@@ -1,8 +1,14 @@
 # EVEngine third-party independent releases
 
-Dependency fixes live in `cmake/patches/`; `cmake/apply_patches.cmake` applies them
-idempotently before every source build. EVEngine does not maintain or inject these
-patches. The same source, ABI defaults and patches produce downloadable libraries.
+Aggregate-owned dependency fixes are committed directly to their source files,
+including SimpleSquirrel direct bindings (C++20). VKBuilder fixes are pinned in its
+source submodule. Only external submodule fixes remain in `cmake/patches/`, applied
+idempotently by `cmake/apply_patches.cmake`. EVEngine does not inject dependency
+patches or generate replacement dependency implementations. Source and release
+builds consume these same canonical headers and ABI defaults.
+
+Native binding regression: `cmake -S tests/simplesquirrel -B build/bindings`,
+then `cmake --build build/bindings` and `ctest --test-dir build/bindings --output-on-failure`.
 
 ## Version policy
 

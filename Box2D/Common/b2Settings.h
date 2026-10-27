@@ -23,6 +23,24 @@
 #include <assert.h>
 #include <float.h>
 
+// EVEngine: when Box2D is built as a shared library for the dynamic engine
+// configuration, its public data symbols (b2_version, b2Vec2_zero) need the
+// same export/import split as its functions. CMake defines Box2D_EXPORTS for
+// the shared target's own translation units; every consumer defines
+// BOX2D_DLL (cmake/link_groups.cmake). Neither is defined for the archive
+// route, so the macro expands to nothing there and the release SDK stays a
+// single self-contained executable. MSVC's all-symbols .def generation used
+// for Box2D's functions cannot export data, hence the explicit annotation.
+#if defined(_WIN32) && (defined(Box2D_EXPORTS) || defined(BOX2D_DLL))
+#  if defined(Box2D_EXPORTS)
+#    define B2_DATA_API __declspec(dllexport)
+#  else
+#    define B2_DATA_API __declspec(dllimport)
+#  endif
+#else
+#  define B2_DATA_API
+#endif
+
 void loveAssert(bool test, const char *teststr);
 
 #define B2_NOT_USED(x) ((void)(x))
@@ -149,6 +167,6 @@ struct b2Version
 };
 
 /// Current version.
-extern b2Version b2_version;
+extern B2_DATA_API b2Version b2_version;
 
 #endif
