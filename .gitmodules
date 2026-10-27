@@ -21,9 +21,3 @@
 [submodule "abseil-cpp"]
 	path = abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
-[submodule "ECS.hpp"]
-	path = ECS.hpp
-	url = https://github.com/sunxfancy/ECS.hpp.git
-[submodule "zeroerr"]
-	path = zeroerr
-	url = https://github.com/sunxfancy/zeroerr.git

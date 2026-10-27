@@ -478,7 +478,3 @@ if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
 endif()
-
-# Canonical header-only dependencies used by the engine and SDK.
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/ECS.hpp/src/ECS.hpp" DESTINATION include)
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/zeroerr/include/zeroerr" DESTINATION include)
