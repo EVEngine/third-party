@@ -478,3 +478,9 @@ if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
 endif()
+
+# Procedural numerical dependency: identical source and installed-package implementation.
+string(REPLACE "," ";" _eve_reference_math_groups "${EVENGINE_THIRD_PARTY_GROUPS}")
+if(NOT EVENGINE_THIRD_PARTY_GROUPS OR "reference_math" IN_LIST _eve_reference_math_groups)
+    add_subdirectory(reference-math)
+endif()

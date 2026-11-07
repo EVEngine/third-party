@@ -99,6 +99,13 @@ jobs:
           cmake -S tests/simplesquirrel -B build/native-bindings -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native-bindings --config Release --parallel 4
           ctest --test-dir build/native-bindings -C Release --output-on-failure
+      - name: Test canonical reference math source contracts
+        if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
+        env:
+          TARGET: ${{ matrix.platform }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: bash scripts/test-reference-math.sh
       - name: Test installed native package
         if: matrix.platform == 'win32' || matrix.platform == 'linux' || matrix.platform == 'macosx'
         env:
