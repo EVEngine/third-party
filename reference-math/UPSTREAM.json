@@ -1,0 +1,90 @@
+{
+  "schema": "evengine.reference-math.vendor-provenance",
+  "version": 1,
+  "dependencies": [
+    {
+      "name": "v8",
+      "repository": "https://github.com/nodejs/node",
+      "commit": "2022edf3e32ce28ee08b17f8566243a090dacd95",
+      "upstreamPrefix": "deps/v8",
+      "files": [
+        {
+          "path": "src/base/ieee754.cc",
+          "sha256": "badd30a2643ed785dcfbbce42f95c2522ccea3605cd39e2933467688aae1de14"
+        },
+        {
+          "path": "src/base/ieee754.h",
+          "sha256": "d04cd7f71eae974bbb2fb64fd27241c7753678f042acd5ee89c2fa30ef37c4c3"
+        },
+        {
+          "path": "src/base/base-export.h",
+          "sha256": "ca42cff80a883839ceff0e060bd98d5d0ee43a78abbce047ecbb8dfe62019b4a"
+        },
+        {
+          "path": "src/base/build_config.h",
+          "sha256": "5b809f262ea64aa231e87f2fe218b0720f8b7927ad23b8472ef4da9b813cd6d5"
+        },
+        {
+          "path": "src/base/macros.h",
+          "sha256": "e9ab320b4260aa90c535160ce48634fd241131d533ce68c753fd750902e49124"
+        },
+        {
+          "path": "src/base/overflowing-math.h",
+          "sha256": "3c7dde9d9b1b6bdd94e18bbf8442dc03f715161f26cf5640945fe07e6799d83a"
+        },
+        {
+          "path": "src/base/abort-mode.h",
+          "sha256": "65285a96759d826e31ad7f971227a9db00847d9d26ca94b7f5de9f53bbdf4f18"
+        },
+        {
+          "path": "src/base/compiler-specific.h",
+          "sha256": "6d4f5102e1651ff4ad31c6bb939c59d78901a8e938ed0d8864861d58d6175574"
+        },
+        {
+          "path": "src/base/immediate-crash.h",
+          "sha256": "48b403992c692e20c9212c69e72ad2e1ddfcd2a264278bee0c1a4e37bb5bd758"
+        },
+        {
+          "path": "src/base/logging.h",
+          "sha256": "07cb5cf8f822a0a83379b36d73bd261930529ae4b95ca2eae56423109cf8f306"
+        },
+        {
+          "path": "src/base/template-utils.h",
+          "sha256": "9718a9339e5edfed7e010a7049e989ab20223599c30138c1da3e84b1a85196c6"
+        },
+        {
+          "path": "include/v8config.h",
+          "sha256": "8c5863fa045d38345f0702b11b8307423b942044198dd9bad5989476775c3d38"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "6ab33af8774a0f396ee3aeeb761e3229057682d6f9fa7f572e390c2cb3a6e509"
+        }
+      ]
+    },
+    {
+      "name": "core-math",
+      "repository": "https://gitlab.inria.fr/core-math/core-math.git",
+      "commit": "660067dfd3e751c8f07acc31c899ff410aa7206e",
+      "upstreamPrefix": "src/binary64/pow",
+      "files": [
+        {
+          "path": "pow.c",
+          "sha256": "b14c65a1d1367f49a0d3e00e65370c3e9dd0fd004fe00e30cdad2a9887954562"
+        },
+        {
+          "path": "pow.h",
+          "sha256": "8e28930b514f1f439011cb201c738c6b8940f321f03f4679362e7f6b7893fd6a"
+        },
+        {
+          "path": "dint.h",
+          "sha256": "c62a9788d872c314c743a821602d6819e5c13113b70f6d4a5d0076695dc413ef"
+        },
+        {
+          "path": "qint.h",
+          "sha256": "32de9c10388056e2294339e3302c3695cdf4abc87ca790ad48917d9794bfb6e4"
+        }
+      ]
+    }
+  ]
+}

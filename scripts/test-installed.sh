@@ -13,3 +13,9 @@ fi
   "-DCMAKE_BUILD_TYPE=${CONFIGURATION:?}"
 "${cmake_command[@]}" --build build/package-check --parallel 4
 ctest --test-dir build/package-check --output-on-failure
+
+# Consume the actual aggregate install through its public CMake package only.
+"${cmake_command[@]}" -G Ninja -S reference-math/tests/consumer -B build/reference-math-package-check \
+  "-DCMAKE_PREFIX_PATH=$PWD/build/install" "-DCMAKE_BUILD_TYPE=${CONFIGURATION:?}"
+"${cmake_command[@]}" --build build/reference-math-package-check --parallel 4
+ctest --test-dir build/reference-math-package-check --output-on-failure
