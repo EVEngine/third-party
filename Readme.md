@@ -80,6 +80,51 @@ ARM64 Windows builds and installed-package tests select `vcvarsarm64.bat` throug
 Android additionally needs ANDROID_HOME and ANDROID_NDK_VERSION. Native builds
 require their OS development packages and Vulkan headers/SDK.
 
+## TLS and HTTPS dependencies
+
+The official OpenSSL submodule is pinned to **3.5.9 LTS** (commit
+`45e844fa2a14ec92d146bd8f5778ac130b6625fb`). Native and mobile installs include
+static OpenSSL SSL/Crypto plus Poco Crypto, Util and NetSSL_OpenSSL. Emscripten
+continues to exclude Poco and OpenSSL; browser networking needs its browser API.
+OpenSSL builds through its upstream Configure/make system, without source patches
+or host OpenSSL discovery. Windows uses /MD or /MDd consistently with Poco.
+The portable no-asm build requires no NASM; optimized assembly can be evaluated
+separately. Providers needed for ordinary TLS are built in; no external provider
+DLLs or legacy provider are installed.
+
+Install a native Perl on Windows (`choco install strawberryperl`) and ensure
+`C:/Strawberry/perl/bin` is on PATH before configuring. Git/MSYS Perl is not a
+native MSVC OpenSSL build environment. Unix builds require Perl and make.
+Use separate build/install directories for Debug and Release and set
+`CMAKE_BUILD_TYPE` explicitly. Ninja is recommended; multi-config generators are
+restricted to that requested configuration so one prefix has one CRT ABI.
+OpenSSL's intermediate install is local to the build directory;
+the aggregate install copies its official headers, static archives and license.
+Consumers of the installed CMake package use `Poco::NetSSL`, with
+`OPENSSL_USE_STATIC_LIBS=TRUE` and `OPENSSL_ROOT_DIR` pointing at the same prefix.
+
+Focused source-build validation (no other aggregate dependencies needed):
+
+```sh
+cmake -G Ninja -S tests/tls -B build/tls -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/build/tls-install"
+cmake --build build/tls --parallel 4
+ctest --test-dir build/tls --output-on-failure
+cmake --install build/tls
+cmake -G Ninja -S tests/tls -B build/tls-consumer -DEVENGINE_TLS_USE_INSTALLED=ON -DCMAKE_PREFIX_PATH="$PWD/build/tls-install" -DOPENSSL_ROOT_DIR="$PWD/build/tls-install" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/tls-consumer --parallel 4
+ctest --test-dir build/tls-consumer --output-on-failure
+```
+
+On Windows prefix the configure/build/install commands with
+`cmake/with-msvc.cmd --arm64` (omit `--arm64` for x64).
+The smoke test generates an ephemeral certificate, verifies HTTPS payloads over
+loopback with TLS 1.2 and TLS 1.3, and checks rejection of an untrusted certificate
+and of a hostname mismatch.
+Release CI runs the same test against installed native packages. This supplies
+the dependency layer; EVEngine must separately select HTTPS sessions and define
+its trust-store policy before claiming HTTPS runtime support. No CA bundle is
+implicitly supplied by the library package.
+
 ## Jolt Physics
 
 `jolt/` is the official Jolt Physics submodule, pinned to **v5.5.0**

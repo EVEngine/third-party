@@ -42,6 +42,18 @@ def pack(prefix: Path, target: str, configuration: str, tag: str, output: Path, 
     validate_stamp((prefix / "third-party-version.txt").read_text(encoding="utf-8"), target, configuration)
     if not (prefix / "include").is_dir() or not (prefix / "lib").is_dir():
         raise ValueError("Third-party install must contain include/ and lib/")
+    for header in ("openssl/ssl.h", "openssl/opensslv.h", "Poco/Net/HTTPSClientSession.h"):
+        if not (prefix / "include" / header).is_file():
+            raise ValueError(f"TLS dependency header missing: {header}")
+    suffix = ("mdd" if configuration == "Debug" else "md") if target == "win32" else ""
+    archives = (
+        ("libssl.lib", "libcrypto.lib", f"PocoNetSSL{suffix}.lib", f"PocoCrypto{suffix}.lib", f"PocoUtil{suffix}.lib")
+        if target == "win32" else
+        ("libssl.a", "libcrypto.a", "libPocoNetSSL.a", "libPocoCrypto.a", "libPocoUtil.a")
+    )
+    for archive_name in archives:
+        if not (prefix / "lib" / archive_name).is_file():
+            raise ValueError(f"TLS dependency archive missing: {archive_name}")
     manifest = {
         "schema": "evengine.third-party-package", "version": 1,
         "platform": target, "configuration": configuration, "aggregate": pin(),

@@ -60,7 +60,9 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$TAG^{commit}")"
       - name: Install Windows build tools
         if: runner.os == 'Windows'
-        run: choco install ninja yasm -y --no-progress
+        run: |
+          choco install ninja yasm strawberryperl -y --no-progress
+          echo 'C:/Strawberry/perl/bin' >> "$GITHUB_PATH"
       - name: Install macOS build tools
         if: runner.os == 'macOS'
         run: brew install ninja
@@ -68,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
+          sudo apt-get install -y build-essential cmake ninja-build perl libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
       - name: Install Vulkan SDK
         if: runner.os != 'Linux' || matrix.architecture != 'arm64'
         uses: jakoch/install-vulkan-sdk-action@d17de7e2f5e50efb5d2123efed18497d3c58c533 # v1
