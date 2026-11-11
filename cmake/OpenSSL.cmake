@@ -13,6 +13,14 @@ function(eve_add_openssl)
         set(CMAKE_CONFIGURATION_TYPES "${CMAKE_BUILD_TYPE}" CACHE STRING "Dependency configuration" FORCE)
         set(CMAKE_CONFIGURATION_TYPES "${CMAKE_BUILD_TYPE}" PARENT_SCOPE)
     endif()
+    if(MSVC AND NOT PERL_EXECUTABLE)
+        # Git Bash prepends its MSYS Perl even when GITHUB_PATH contains
+        # Strawberry. Prefer the native installation before general discovery;
+        # an explicit caller-provided PERL_EXECUTABLE always takes precedence.
+        find_program(PERL_EXECUTABLE NAMES perl
+            PATHS "C:/Strawberry/perl/bin" "$ENV{ProgramFiles}/Strawberry/perl/bin"
+            NO_DEFAULT_PATH)
+    endif()
     find_package(Perl REQUIRED)
     if(MSVC)
         execute_process(COMMAND "${PERL_EXECUTABLE}" -e "print $^O"
