@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class OpenSSLEnvironmentTests(unittest.TestCase):
-    def run_case(self, windows):
+    def run_case(self, path):
+        windows = os.name == "nt"
         cmake = Path(shutil.which("cmake")).resolve().as_posix()
         # Use native Perl on Windows: MSYS may translate environment values
         # before the fixture can inspect what cmake -E env actually supplied.
@@ -38,11 +39,6 @@ class OpenSSLEnvironmentTests(unittest.TestCase):
             shutil.copyfile(ROOT / "cmake/OpenSSL.cmake", root / "cmake/OpenSSL.cmake")
             (source / "VERSION.dat").write_text(
                 "MAJOR=3\nMINOR=0\nPATCH=0\n", encoding="utf-8"
-            )
-            path = (
-                "C:/Git tools/bin;C:/Git/usr/bin"
-                if windows
-                else "/tools with spaces/bin:/other;literal/bin"
             )
             tools = Path(cmake).parent.as_posix()
             expected = tools + (";" if windows else ":") + path
@@ -107,7 +103,6 @@ set(PERL_EXECUTABLE "{perl}")
 set(_make "{make}")
 set(ENV{{PATH}} "{path}")
 include(cmake/OpenSSL.cmake)
-set(CMAKE_HOST_WIN32 {"TRUE" if windows else "FALSE"})
 eve_add_openssl()
 ''',
                 encoding="utf-8",
@@ -130,11 +125,22 @@ eve_add_openssl()
                     (root / f"{stage}.ok").read_text(encoding="utf-8"), "ok"
                 )
 
-    def test_windows_path_survives_all_external_project_stages(self):
-        self.run_case(True)
+    def test_native_path_survives_all_external_project_stages(self):
+        self.run_case(
+            "C:/Git tools/bin;C:/Git/usr/bin"
+            if os.name == "nt"
+            else "/tools with spaces/bin:/other/bin"
+        )
 
-    def test_posix_path_survives_all_external_project_stages(self):
-        self.run_case(False)
+    def test_semicolons_and_spaces_survive_all_external_project_stages(self):
+        # Exercise the actual host process ABI. GNU Make on Windows rewrites
+        # POSIX PATH strings; pretending that host is POSIX tests Make rather
+        # than the environment supplied by our ExternalProject commands.
+        self.run_case(
+            "C:/Git tools/bin;D:/other tools/bin;C:/third/bin"
+            if os.name == "nt"
+            else "/tools with spaces/bin:/other;literal/bin"
+        )
 
 
 if __name__ == "__main__":
