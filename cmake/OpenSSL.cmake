@@ -13,6 +13,13 @@ function(eve_add_openssl)
         set(CMAKE_CONFIGURATION_TYPES "${CMAKE_BUILD_TYPE}" CACHE STRING "Dependency configuration" FORCE)
         set(CMAKE_CONFIGURATION_TYPES "${CMAKE_BUILD_TYPE}" PARENT_SCOPE)
     endif()
+    if(CMAKE_HOST_WIN32 AND ANDROID AND NOT PERL_EXECUTABLE)
+        # Android uses OpenSSL's Unix makefiles, so its Perl and Make must
+        # belong to one complete POSIX environment, not Git's partial Perl.
+        find_program(PERL_EXECUTABLE NAMES perl
+            PATHS "$ENV{EVE_OPENSSL_MSYS2_ROOT}/usr/bin" "C:/msys64/usr/bin"
+            NO_DEFAULT_PATH)
+    endif()
     if(MSVC AND NOT PERL_EXECUTABLE)
         # Git Bash prepends its MSYS Perl even when GITHUB_PATH contains
         # Strawberry. Prefer the native installation before general discovery;
@@ -29,6 +36,28 @@ function(eve_add_openssl)
             message(FATAL_ERROR "MSVC OpenSSL requires native Windows Perl (e.g. Strawberry), not MSYS/Cygwin Perl")
         endif()
     endif()
+    set(_android_ndk "${CMAKE_ANDROID_NDK}")
+    set(_openssl_cygpath "")
+    if(CMAKE_HOST_WIN32 AND ANDROID)
+        execute_process(COMMAND "${PERL_EXECUTABLE}" -MIPC::Cmd -e "print $^O"
+            OUTPUT_VARIABLE _perl_platform RESULT_VARIABLE _perl_result
+            ERROR_VARIABLE _perl_error)
+        if(NOT _perl_result EQUAL 0)
+            message(FATAL_ERROR "Android OpenSSL needs a complete Perl with IPC::Cmd: ${_perl_error}")
+        endif()
+        if(_perl_platform MATCHES "^(msys|cygwin)$")
+            get_filename_component(_perl_bin "${PERL_EXECUTABLE}" DIRECTORY)
+            find_program(_openssl_cygpath_program NAMES cygpath PATHS "${_perl_bin}" NO_DEFAULT_PATH REQUIRED)
+            find_program(_openssl_posix_make NAMES make PATHS "${_perl_bin}" NO_DEFAULT_PATH REQUIRED)
+            set(_openssl_cygpath "${_openssl_cygpath_program}")
+            execute_process(COMMAND "${_openssl_cygpath}" -u "${_android_ndk}"
+                OUTPUT_VARIABLE _android_ndk OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _path_result)
+            if(NOT _path_result EQUAL 0)
+                message(FATAL_ERROR "Could not convert the Android NDK path for the selected Perl")
+            endif()
+        endif()
+    endif()
     set(_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../openssl")
     if(NOT EXISTS "${_source}/Configure")
         message(FATAL_ERROR "OpenSSL sources missing: run git submodule update --init --recursive")
@@ -39,8 +68,17 @@ function(eve_add_openssl)
     endforeach()
     set(EVE_OPENSSL_VERSION "${_MAJOR}.${_MINOR}.${_PATCH}" PARENT_SCOPE)
     set(_prefix "${CMAKE_CURRENT_BINARY_DIR}/openssl-install")
+    set(_configure_prefix "${_prefix}")
+    if(_openssl_cygpath)
+        execute_process(COMMAND "${_openssl_cygpath}" -u "${_prefix}"
+            OUTPUT_VARIABLE _configure_prefix OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _path_result)
+        if(NOT _path_result EQUAL 0)
+            message(FATAL_ERROR "Could not convert the OpenSSL install path for the selected Perl")
+        endif()
+    endif()
     set(_options no-shared no-tests no-apps no-module no-legacy no-asm
-        "--prefix=${_prefix}" --libdir=lib)
+        "--prefix=${_configure_prefix}" --libdir=lib)
     set(_env)
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _arch)
     if(MSVC)
@@ -63,7 +101,11 @@ function(eve_add_openssl)
             list(APPEND _options /MD)
         endif()
     else()
-        find_program(_make NAMES gmake make REQUIRED)
+        if(_openssl_posix_make)
+            set(_make "${_openssl_posix_make}")
+        else()
+            find_program(_make NAMES gmake make REQUIRED)
+        endif()
         set(_crypto "${_prefix}/lib/libcrypto.a")
         set(_ssl "${_prefix}/lib/libssl.a")
         set(_system_libs "${CMAKE_DL_LIBS}")
@@ -80,7 +122,19 @@ function(eve_add_openssl)
                 message(FATAL_ERROR "Unsupported OpenSSL Android ABI: ${CMAKE_ANDROID_ARCH_ABI}")
             endif()
             get_filename_component(_tools "${CMAKE_C_COMPILER}" DIRECTORY)
-            list(APPEND _env "ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}" "PATH=${_tools}:$ENV{PATH}")
+            if(CMAKE_HOST_WIN32)
+                if(_openssl_cygpath)
+                    set(_path "${_tools};${_perl_bin};$ENV{PATH}")
+                else()
+                    set(_path "${_tools};$ENV{PATH}")
+                endif()
+            else()
+                set(_path "${_tools}:$ENV{PATH}")
+            endif()
+            # ExternalProject expands CMake lists before constructing commands.
+            # Encode literal semicolons until its final command generation step.
+            string(REPLACE ";" "<EVE_OPENSSL_SEMICOLON>" _path "${_path}")
+            list(APPEND _env "ANDROID_NDK_ROOT=${_android_ndk}" "PATH=${_path}")
             # The NDK's legacy toolchain sets CMAKE_SYSTEM_VERSION to 1;
             # ANDROID_PLATFORM_LEVEL is its resolved native API (including
             # NDK minimum-level adjustments). CMake's own Android toolchain
@@ -143,6 +197,7 @@ function(eve_add_openssl)
         list(APPEND _options --release)
     endif()
     ExternalProject_Add(eve_openssl
+        LIST_SEPARATOR "<EVE_OPENSSL_SEMICOLON>"
         SOURCE_DIR "${_source}" DOWNLOAD_COMMAND "" UPDATE_COMMAND ""
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env ${_env}
             "${PERL_EXECUTABLE}" "${_source}/Configure" ${_target} ${_options}

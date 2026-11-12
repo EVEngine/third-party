@@ -1,0 +1,50 @@
+name: Windows Android OpenSSL
+
+on:
+  pull_request:
+    paths:
+      - 'cmake/OpenSSL.cmake'
+      - 'openssl'
+      - 'tests/openssl-android/**'
+      - '.github/workflows/openssl-android.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openssl-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-android:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize OpenSSL only
+        run: git submodule update --init --depth 1 -- openssl
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+      - name: Install complete POSIX build tools
+        id: msys2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: MSYS
+          path-type: inherit
+          install: perl make
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: ndk;27.3.13750724
+      - name: Configure and link Android TLS consumer
+        env:
+          EVE_OPENSSL_MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          cmake -S tests/openssl-android -B build/openssl-android -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.3.13750724/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24
+          cmake --build build/openssl-android --parallel 4

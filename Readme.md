@@ -94,7 +94,12 @@ DLLs or legacy provider are installed.
 
 Install a native Perl on Windows (`choco install strawberryperl`) and ensure
 `C:/Strawberry/perl/bin` is on PATH before configuring. Git/MSYS Perl is not a
-native MSVC OpenSSL build environment. Unix builds require Perl and make.
+native MSVC OpenSSL build environment. Windows-hosted Android source builds
+instead require a complete MSYS2 installation with `perl` and `make`; set
+`EVE_OPENSSL_MSYS2_ROOT` to its installation directory (for example `C:/msys64`).
+The aggregate selects matching tools and converts NDK/install paths for the
+POSIX build environment. Git's bundled Perl is incomplete for OpenSSL Configure.
+Unix builds require Perl and make.
 Use separate build/install directories for Debug and Release and set
 `CMAKE_BUILD_TYPE` explicitly. Ninja is recommended; multi-config generators are
 restricted to that requested configuration so one prefix has one CRT ABI.
