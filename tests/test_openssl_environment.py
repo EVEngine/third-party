@@ -13,7 +13,18 @@ ROOT = Path(__file__).resolve().parents[1]
 class OpenSSLEnvironmentTests(unittest.TestCase):
     def run_case(self, windows):
         cmake = Path(shutil.which("cmake")).resolve().as_posix()
-        perl = Path(shutil.which("perl")).resolve().as_posix()
+        # Use native Perl on Windows: MSYS may translate environment values
+        # before the fixture can inspect what cmake -E env actually supplied.
+        native_perl = Path("C:/Strawberry/perl/bin/perl.exe")
+        perl = (
+            (
+                native_perl
+                if os.name == "nt" and native_perl.is_file()
+                else Path(shutil.which("perl"))
+            )
+            .resolve()
+            .as_posix()
+        )
         make = Path(shutil.which("make") or shutil.which("gmake")).resolve().as_posix()
         with tempfile.TemporaryDirectory(prefix="openssl env ") as temporary:
             root = Path(temporary)
