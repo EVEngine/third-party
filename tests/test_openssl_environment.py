@@ -27,7 +27,9 @@ class OpenSSLEnvironmentTests(unittest.TestCase):
         )
         make = Path(shutil.which("make") or shutil.which("gmake")).resolve().as_posix()
         with tempfile.TemporaryDirectory(prefix="openssl env ") as temporary:
-            root = Path(temporary)
+            # Windows TEMP may contain RUNNER~1 while CMake expands that
+            # short name. Compare canonical paths, preserving all PATH bytes.
+            root = Path(temporary).resolve()
             (root / "cmake").mkdir()
             source = root / "openssl"
             source.mkdir()
@@ -56,7 +58,8 @@ for my $pair (["PATH", "expected-path"], ["ANDROID_NDK_ROOT", "expected-ndk"]) {
     open my $file, '<', "$FindBin::Bin/../$pair->[1]" or die $!;
     local $/;
     my $expected = <$file>;
-    die "incorrect $pair->[0]" unless $ENV{$pair->[0]} eq $expected;
+    die "incorrect $pair->[0]: actual=[$ENV{$pair->[0]}] expected=[$expected]"
+        unless $ENV{$pair->[0]} eq $expected;
 }
 die "missing Android target" unless $ARGV[0] eq "android-arm64";
 open my $marker, '>', "$FindBin::Bin/../configure.ok" or die $!;
