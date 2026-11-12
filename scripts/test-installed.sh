@@ -13,3 +13,8 @@ fi
   "-DCMAKE_BUILD_TYPE=${CONFIGURATION:?}"
 "${cmake_command[@]}" --build build/package-check --parallel 4
 ctest --test-dir build/package-check --output-on-failure
+"${cmake_command[@]}" -G Ninja -S tests/tls -B build/tls-package-check \
+  -DEVENGINE_TLS_USE_INSTALLED=ON "-DCMAKE_PREFIX_PATH=$PWD/build/install" \
+  "-DOPENSSL_ROOT_DIR=$PWD/build/install" "-DCMAKE_BUILD_TYPE=${CONFIGURATION:?}"
+"${cmake_command[@]}" --build build/tls-package-check --parallel 4
+ctest --test-dir build/tls-package-check --output-on-failure

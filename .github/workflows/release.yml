@@ -48,8 +48,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
+      - name: Initialize build dependencies
+        run: |
+          git submodule update --init --recursive -- . ':(exclude)openssl'
+          # OpenSSL's nested repositories are optional upstream test suites and
+          # providers, unused by our no-tests/no-module library build.
+          git submodule update --init --depth 1 -- openssl
       - name: Verify tag and record source commit
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
@@ -60,15 +66,16 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$TAG^{commit}")"
       - name: Install Windows build tools
         if: runner.os == 'Windows'
-        run: choco install ninja yasm -y --no-progress
+        run: |
+          choco install ninja yasm strawberryperl -y --no-progress
+          echo 'C:/Strawberry/perl/bin' >> "$GITHUB_PATH"
       - name: Install macOS build tools
         if: runner.os == 'macOS'
         run: brew install ninja
       - name: Install Linux build prerequisites
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
+        timeout-minutes: 15
+        run: bash scripts/install-ubuntu-packages.sh build-essential cmake ninja-build perl libx11-dev libxxf86vm-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libxss-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev
       - name: Install Vulkan SDK
         if: runner.os != 'Linux' || matrix.architecture != 'arm64'
         uses: jakoch/install-vulkan-sdk-action@d17de7e2f5e50efb5d2123efed18497d3c58c533 # v1
@@ -78,7 +85,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install native Linux ARM64 Vulkan headers and tools
         if: runner.os == 'Linux' && matrix.architecture == 'arm64'
-        run: sudo apt-get install -y --no-install-recommends libvulkan-dev glslc glslang-tools
+        timeout-minutes: 15
+        run: bash scripts/install-ubuntu-packages.sh libvulkan-dev glslc glslang-tools
       - name: Setup Android NDK
         if: matrix.platform == 'android'
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4

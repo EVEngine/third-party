@@ -210,8 +210,8 @@ add_subdirectory(simplesquirrel)
 # for poco
 set(POCO_STATIC ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-# EVEngine only links Foundation/Net/JSON/XML; disable the rest so AppleClang
-# does not need to build broken optional components (Data/BLOB, etc.).
+# Keep the runtime Foundation/Net/JSON/XML/Data set and the NetSSL dependency
+# closure (Crypto/Util); disable unrelated optional components.
 set(ENABLE_DATA ON CACHE BOOL "" FORCE)
 set(ENABLE_DATA_SQLITE ON CACHE BOOL "" FORCE)
 set(ENABLE_DATA_MYSQL OFF CACHE BOOL "" FORCE)
@@ -220,16 +220,23 @@ set(ENABLE_DATA_ODBC OFF CACHE BOOL "" FORCE)
 set(ENABLE_MONGODB OFF CACHE BOOL "" FORCE)
 set(ENABLE_REDIS OFF CACHE BOOL "" FORCE)
 set(ENABLE_JWT OFF CACHE BOOL "" FORCE)
-set(ENABLE_NETSSL OFF CACHE BOOL "" FORCE)
-set(ENABLE_CRYPTO OFF CACHE BOOL "" FORCE)
+set(ENABLE_NETSSL ON CACHE BOOL "" FORCE)
+set(ENABLE_CRYPTO ON CACHE BOOL "" FORCE)
 set(ENABLE_ZIP OFF CACHE BOOL "" FORCE)
 set(ENABLE_PAGECOMPILER OFF CACHE BOOL "" FORCE)
 set(ENABLE_PAGECOMPILER_FILE2PAGE OFF CACHE BOOL "" FORCE)
 set(ENABLE_ACTIVERECORD OFF CACHE BOOL "" FORCE)
 set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "" FORCE)
-set(ENABLE_UTIL OFF CACHE BOOL "" FORCE)
+set(ENABLE_UTIL ON CACHE BOOL "" FORCE)
 if(NOT EVENGINE_WEBGPU_TRIM)
+  include(cmake/OpenSSL.cmake)
+  eve_add_openssl()
+  set(OPENSSL_USE_STATIC_LIBS TRUE)
+  set(POCO_DISABLE_INTERNAL_OPENSSL ON CACHE BOOL "" FORCE)
+  set(FORCE_OPENSSL ON CACHE BOOL "" FORCE)
+  list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundled-openssl")
   add_subdirectory(poco)
+  list(REMOVE_ITEM CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundled-openssl")
 endif()
 
 # for zlib

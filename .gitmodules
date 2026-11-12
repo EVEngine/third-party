@@ -21,3 +21,7 @@
 [submodule "abseil-cpp"]
 	path = abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
+[submodule "openssl"]
+	path = openssl
+	url = https://github.com/openssl/openssl.git
+	shallow = true
