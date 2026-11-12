@@ -81,7 +81,19 @@ function(eve_add_openssl)
             endif()
             get_filename_component(_tools "${CMAKE_C_COMPILER}" DIRECTORY)
             list(APPEND _env "ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}" "PATH=${_tools}:$ENV{PATH}")
-            list(APPEND _options "-D__ANDROID_API__=${CMAKE_SYSTEM_VERSION}")
+            # The NDK's legacy toolchain sets CMAKE_SYSTEM_VERSION to 1;
+            # ANDROID_PLATFORM_LEVEL is its resolved native API (including
+            # NDK minimum-level adjustments). CMake's own Android toolchain
+            # instead records that API in CMAKE_SYSTEM_VERSION.
+            if(DEFINED ANDROID_PLATFORM_LEVEL)
+                set(_android_api "${ANDROID_PLATFORM_LEVEL}")
+            else()
+                set(_android_api "${CMAKE_SYSTEM_VERSION}")
+            endif()
+            if(NOT _android_api MATCHES "^[0-9]+$" OR _android_api LESS 16)
+                message(FATAL_ERROR "Invalid OpenSSL Android native API: ${_android_api}")
+            endif()
+            list(APPEND _options "-D__ANDROID_API__=${_android_api}")
         elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
             string(TOLOWER "${CMAKE_OSX_SYSROOT}" _sdk)
             if(_sdk MATCHES "simulator")
