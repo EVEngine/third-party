@@ -261,6 +261,10 @@ file(GLOB_RECURSE vulkan_video_src ${CMAKE_CURRENT_SOURCE_DIR}/vk_video/*)
 install(FILES ${vma_src} ${vulkan_headers_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vulkan/ COMPONENT Development)
 install(FILES ${vulkan_video_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vk_video/ COMPONENT Development)
 
+# Install the canonical VKBuilder implementation for source, package and SDK consumers.
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/VKBuilder/include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
+
 # install header-only
 file(GLOB_RECURSE headers_src ${CMAKE_CURRENT_SOURCE_DIR}/header-only/*)
 install(FILES ${headers_src} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ COMPONENT Development)
