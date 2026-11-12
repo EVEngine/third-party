@@ -99,6 +99,7 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
           CONFIGURATION: ${{ matrix.configuration }}
         run: |
+          python3 tests/test_openssl_environment.py
           python3 tests/test_patches.py
           bash scripts/build-release.sh
       - name: Test canonical SimpleSquirrel bindings

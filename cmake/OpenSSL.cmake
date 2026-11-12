@@ -80,7 +80,15 @@ function(eve_add_openssl)
                 message(FATAL_ERROR "Unsupported OpenSSL Android ABI: ${CMAKE_ANDROID_ARCH_ABI}")
             endif()
             get_filename_component(_tools "${CMAKE_C_COMPILER}" DIRECTORY)
-            list(APPEND _env "ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}" "PATH=${_tools}:$ENV{PATH}")
+            if(CMAKE_HOST_WIN32)
+                set(_path "${_tools};$ENV{PATH}")
+            else()
+                set(_path "${_tools}:$ENV{PATH}")
+            endif()
+            # ExternalProject expands CMake lists before constructing commands.
+            # Encode literal semicolons until its final command generation step.
+            string(REPLACE ";" "<EVE_OPENSSL_SEMICOLON>" _path "${_path}")
+            list(APPEND _env "ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}" "PATH=${_path}")
             # The NDK's legacy toolchain sets CMAKE_SYSTEM_VERSION to 1;
             # ANDROID_PLATFORM_LEVEL is its resolved native API (including
             # NDK minimum-level adjustments). CMake's own Android toolchain
@@ -143,6 +151,7 @@ function(eve_add_openssl)
         list(APPEND _options --release)
     endif()
     ExternalProject_Add(eve_openssl
+        LIST_SEPARATOR "<EVE_OPENSSL_SEMICOLON>"
         SOURCE_DIR "${_source}" DOWNLOAD_COMMAND "" UPDATE_COMMAND ""
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env ${_env}
             "${PERL_EXECUTABLE}" "${_source}/Configure" ${_target} ${_options}
